@@ -1,7 +1,6 @@
 import numpy as np
 import random
 
-
 class CampoBatalhaEnv:
     def __init__(self, largura=21, comprimento=100):
         self.largura = largura
@@ -51,7 +50,7 @@ class CampoBatalhaEnv:
         self.posicao_x = self.largura // 2
         self.posicao_y = 0
 
-        # Balanceamento: Distância da enxurrada travada em 7 blocos atrás do agente
+        # Balanceamento: Distância da enxurrada travada em 8 blocos atrás do agente
         self.linha_tiros_y = -8
         self.bonus_movimento = False  # Reseta o bônus de velocidade
 
