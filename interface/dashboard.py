@@ -1,6 +1,5 @@
 import pygame
 
-
 class Dashboard:
     def __init__(self):
         # ---- CONFIGURAÇÕES VISUAIS ----
@@ -23,7 +22,7 @@ class Dashboard:
         self.AZUL_OBJETIVO = (0, 180, 255)
         self.VERMELHO_FOGO = (255, 60, 0, 120)
 
-        # Inicialização das Fontes (Feita APENAS UMA VEZ na inicialização)
+        # Inicialização das Fontes
         pygame.font.init()
         self.fonte_titulo = pygame.font.SysFont("Segoe UI", 32, bold=True)
         self.fonte_texto = pygame.font.SysFont("Segoe UI", 16, bold=True)
@@ -92,7 +91,8 @@ class Dashboard:
         py_agente = (env.comprimento - 1 - env.posicao_y) * self.LARGURA_CELULA - offset_y
         centro = (agente_px + self.LARGURA_CELULA // 2, py_agente + self.LARGURA_CELULA // 2)
 
-        cor_agente = self.OURO_CHOCOLATE if env.bonus_movimento else self.BRANCO
+        # CORREÇÃO: Lendo a variável visual
+        cor_agente = self.OURO_CHOCOLATE if env.bonus_visual else self.BRANCO
         pygame.draw.circle(tela, cor_agente, centro, self.LARGURA_CELULA // 2.5)
         pygame.draw.circle(tela, (20, 20, 20), centro, self.LARGURA_CELULA // 5)
 
@@ -122,7 +122,8 @@ class Dashboard:
             self.AZUL_OBJETIVO if "VITÓRIA" in status else self.VERMELHO_MINA)
         self._desenhar_card(tela, margem_x, 100, largura_total, 90, "STATUS DO AGENTE", status, cor_status)
 
-        self._desenhar_card(tela, margem_x, 210, largura_metade, 90, "AVANÇO (EIXO Y)", f"{env.posicao_y} / 99",
+        # CORREÇÃO: Lê o limite real do mapa dinamicamente
+        self._desenhar_card(tela, margem_x, 210, largura_metade, 90, "AVANÇO (EIXO Y)", f"{env.posicao_y} / {env.comprimento - 1}",
                             self.BRANCO)
         dist_tiros = env.posicao_y - env.linha_tiros_y
         cor_dist = self.VERMELHO_MINA if dist_tiros < 4 else self.BRANCO
@@ -151,7 +152,7 @@ class Dashboard:
             "[Setas] Controle Manual    |    [R] Nova Simulação    |    [ESC] Voltar ao Menu", True, self.CINZA_TEXTO)
         tela.blit(img_dica, (margem_x, self.ALTURA_TELA - 40))
 
-    def _desenhar_overlay_fim_jogo(self, tela, status):
+    def _desenhar_overlay_fim_jogo(self, tela, status, env):
         s_overlay = pygame.Surface((self.LARGURA_JOGO, self.ALTURA_TELA), pygame.SRCALPHA)
         s_overlay.fill((0, 0, 0, 180))
         tela.blit(s_overlay, (0, 0))
@@ -166,13 +167,20 @@ class Dashboard:
         pygame.draw.rect(tela, cor, rect.inflate(40, 40), 2, border_radius=10)
         tela.blit(img, rect)
 
-        # Aviso visual para usar a tecla R no Game Over
+        # Aviso padrão (Tecla R)
         img_dica = self.fonte_texto.render("Pressione [ R ] para jogar novamente", True, self.BRANCO)
         rect_dica = img_dica.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 60))
         tela.blit(img_dica, rect_dica)
 
+        # --- NOVIDADE: Aviso de Próximo Nível (Tecla N) ---
+        if "VITÓRIA" in status and env.dificuldade in ["FACIL", "MEDIO"]:
+            prox_nivel = "MÉDIO" if env.dificuldade == "FACIL" else "DIFÍCIL"
+            img_next = self.fonte_texto.render(f"Pressione [ N ] para avançar ao nível {prox_nivel}", True,
+                                               self.OURO_CHOCOLATE)
+            rect_next = img_next.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 90))
+            tela.blit(img_next, rect_next)
+
     def renderizar_frame(self, tela, env, pontuacao, acao_str, status):
-        # Calcula dinamicamente as proporções baseado na largura da matriz
         self.LARGURA_JOGO = env.largura * self.LARGURA_CELULA
         self.LARGURA_PAINEL = tela.get_width() - self.LARGURA_JOGO
 
@@ -181,4 +189,5 @@ class Dashboard:
         self._desenhar_painel(tela, env, pontuacao, acao_str, status)
 
         if status != "Correndo":
-            self._desenhar_overlay_fim_jogo(tela, status)
+            # Passamos o 'env' agora para ele saber em qual dificuldade estamos
+            self._desenhar_overlay_fim_jogo(tela, status, env)

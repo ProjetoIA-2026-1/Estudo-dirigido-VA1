@@ -8,24 +8,22 @@ from interface.menu import MenuPrincipal
 def main():
     pygame.init()
 
-    # Resolução HD
     LARGURA_TELA = 1280
     ALTURA_TELA = 720
     tela = pygame.display.set_mode((LARGURA_TELA, ALTURA_TELA))
     pygame.display.set_caption("Resgate Tático: Inteligência Artificial")
 
-    # Instancia as Classes
     menu = MenuPrincipal(LARGURA_TELA, ALTURA_TELA)
     dashboard = Dashboard()
-    env = CampoBatalhaEnv()
 
-    # Variáveis de Controle
+    # Inicia com um ambiente padrão apenas para existir na memória
+    env = CampoBatalhaEnv(dificuldade="MEDIO")
+
     estado_atual = "ESTADO_MENU"
     pontuacao = 0
     status_jogo = "Correndo"
     acao_str = "Aguardando..."
 
-    # Pré-carregamento das Fontes da Tela de Agentes (Fora do Loop!)
     fonte_tit_ag = pygame.font.SysFont("Segoe UI", 40, bold=True)
     fonte_sub_ag = pygame.font.SysFont("Segoe UI", 20)
     img_tit_ag = fonte_tit_ag.render("PAINEL DOS AGENTES IA (EM CONSTRUÇÃO)", True, (0, 180, 255))
@@ -43,28 +41,45 @@ def main():
                 sys.exit()
 
         # ==========================================
-        # 1. ROTEAMENTO: TELA DE MENU
+        # 1. ESTADO: MENU PRINCIPAL
         # ==========================================
         if estado_atual == "ESTADO_MENU":
             novo_estado = menu.processar_eventos(eventos)
-
             if novo_estado == "SAIR":
                 pygame.quit()
                 sys.exit()
-
-            elif novo_estado == "ESTADO_JOGAR":
-                env.reset()
-                pontuacao = 0
-                status_jogo = "Correndo"
-                estado_atual = novo_estado
-
-            elif novo_estado == "ESTADO_AGENTES":
+            elif novo_estado in ["SELECIONAR_DIF_MANUAL", "SELECIONAR_DIF_IA"]:
                 estado_atual = novo_estado
 
             menu.desenhar(tela)
 
         # ==========================================
-        # 2. ROTEAMENTO: TELA DE JOGO MANUAL
+        # 2. ESTADO: TELA DE SELEÇÃO DE DIFICULDADE
+        # ==========================================
+        elif estado_atual in ["SELECIONAR_DIF_MANUAL", "SELECIONAR_DIF_IA"]:
+            escolha = menu.processar_eventos_dificuldade(eventos)
+
+            if escolha == "VOLTAR":
+                estado_atual = "ESTADO_MENU"
+            elif escolha in ["FACIL", "MEDIO", "DIFICIL"]:
+                # É AQUI QUE A MÁGICA ACONTECE! Recriamos o mapa com a dificuldade escolhida.
+                env = CampoBatalhaEnv(dificuldade=escolha)
+                env.reset()
+                pontuacao = 0
+                status_jogo = "Correndo"
+                acao_str = "Nova Simulação"
+
+                # Encaminha para o modo correto
+                if estado_atual == "SELECIONAR_DIF_MANUAL":
+                    estado_atual = "ESTADO_JOGAR"
+                else:
+                    estado_atual = "ESTADO_AGENTES"
+
+            modo_origem = "MANUAL" if estado_atual == "SELECIONAR_DIF_MANUAL" else "IA"
+            menu.desenhar_dificuldade(tela, modo_origem)
+
+        # ==========================================
+        # 3. ESTADO: SIMULAÇÃO MANUAL
         # ==========================================
         elif estado_atual == "ESTADO_JOGAR":
             tomou_acao = False
@@ -73,32 +88,46 @@ def main():
             for evento in eventos:
                 if evento.type == pygame.KEYDOWN:
 
-                    # Teclas Sempre Liberadas (ESC e R)
+                    # 1. ESC Volta ao Menu
                     if evento.key == pygame.K_ESCAPE:
                         estado_atual = "ESTADO_MENU"
+
+                    # 2. R Reinicia o mesmo nível
                     elif evento.key == pygame.K_r:
                         env.reset()
                         pontuacao = 0
                         status_jogo = "Correndo"
                         acao_str = "Nova Simulação"
 
-                    # Teclas de Movimento (Só operam se estiver vivo)
+                    # --- NOVIDADE: N Avança para o próximo nível ---
+                    elif evento.key == pygame.K_n and "VITÓRIA" in status_jogo:
+                        if env.dificuldade == "FACIL":
+                            env = CampoBatalhaEnv(dificuldade="MEDIO")
+                        elif env.dificuldade == "MEDIO":
+                            env = CampoBatalhaEnv(dificuldade="DIFICIL")
+
+                        env.reset()
+                        pontuacao = 0
+                        status_jogo = "Correndo"
+                        acao_str = "Avançou de Nível"
+
+                    # 3. Teclas de Movimento (Só operam se estiver vivo)
                     elif status_jogo == "Correndo":
                         if evento.key == pygame.K_UP:
-                            acao = 0;
-                            acao_str = "Avançar";
+                            acao = 0
+                            acao_str = "Avançar"
                             tomou_acao = True
                         elif evento.key == pygame.K_LEFT:
-                            acao = 1;
-                            acao_str = "Esquerda";
+                            acao = 1
+                            acao_str = "Esquerda"
                             tomou_acao = True
                         elif evento.key == pygame.K_RIGHT:
-                            acao = 2;
-                            acao_str = "Direita";
+                            acao = 2
+                            acao_str = "Direita"
                             tomou_acao = True
                         elif evento.key == pygame.K_DOWN:
-                            acao = 3;
-                            acao_str = "Recuar";
+                            acao = 3
+                            acao_str = "Recuar"
                             tomou_acao = True
 
             if tomou_acao and status_jogo == "Correndo":
@@ -111,7 +140,7 @@ def main():
             dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo)
 
         # ==========================================
-        # 3. ROTEAMENTO: TELA DOS AGENTES
+        # 4. ESTADO: TELA DOS AGENTES
         # ==========================================
         elif estado_atual == "ESTADO_AGENTES":
             for evento in eventos:
@@ -122,7 +151,12 @@ def main():
             tela.fill((15, 18, 25))
             tela.blit(img_tit_ag, (LARGURA_TELA // 2 - img_tit_ag.get_width() // 2, ALTURA_TELA // 2 - 60))
             tela.blit(img_sub_ag, (LARGURA_TELA // 2 - img_sub_ag.get_width() // 2, ALTURA_TELA // 2 + 10))
-            tela.blit(img_esc_ag, (LARGURA_TELA // 2 - img_esc_ag.get_width() // 2, ALTURA_TELA // 2 + 60))
+
+            # Mostra a dificuldade escolhida
+            img_dif = fonte_sub_ag.render(f"Dificuldade Selecionada: {env.dificuldade}", True, (255, 190, 50))
+            tela.blit(img_dif, (LARGURA_TELA // 2 - img_dif.get_width() // 2, ALTURA_TELA // 2 + 40))
+
+            tela.blit(img_esc_ag, (LARGURA_TELA // 2 - img_esc_ag.get_width() // 2, ALTURA_TELA // 2 + 90))
 
         pygame.display.flip()
         relogio.tick(30)
