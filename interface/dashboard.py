@@ -146,14 +146,18 @@ class Dashboard:
             img_texto = self.fonte_texto.render(texto, True, self.CINZA_TEXTO)
             tela.blit(img_texto, (margem_x + 15, y_ia + 55 + (i * 28)))
 
-        # Altera dinamicamente as dicas no rodapé com base no modo de jogo ativo
-        if modo == "MANUAL":
-            texto_rodape = "[Setas] Mover    |    [R] Reiniciar    |    [N] Avançar Nível    |    [ESC] Menu"
-        else:
-            texto_rodape = "[A] Iniciar A* |    [R] Reiniciar    |    [N] Avançar Nível    |    [ESC] Menu"
+            # Altera dinamicamente as dicas no rodapé com base no modo exato de jogo ativo
+            if modo == "MANUAL":
+                texto_rodape = "[Setas] Mover  |  [R] Reiniciar  |  [N] Avançar Nível  |  [ESC] Voltar"
+            elif modo == "IA_ASTAR":
+                texto_rodape = "[A] Iniciar A* |  [R] Repetir Mapa  |  [M] Novo Mapa  |  [ESC] Voltar"
+            elif modo == "IA_REPLAY":
+                texto_rodape = "[A] Iniciar Replay  |  [R] Repetir Replay  |  [ESC] Voltar"
+            else:
+                texto_rodape = "[ESC] Voltar"
 
-        img_dica = self.fonte_texto.render(texto_rodape, True, self.CINZA_TEXTO)
-        tela.blit(img_dica, (margem_x, self.ALTURA_TELA - 40))
+            img_dica = self.fonte_texto.render(texto_rodape, True, self.CINZA_TEXTO)
+            tela.blit(img_dica, (margem_x, self.ALTURA_TELA - 40))
 
     def _desenhar_overlay_fim_jogo(self, tela, status, env):
         s_overlay = pygame.Surface((self.LARGURA_JOGO, self.ALTURA_TELA), pygame.SRCALPHA)
