@@ -3,6 +3,7 @@ import sys
 from environment import CampoBatalhaEnv
 from interface.dashboard import Dashboard
 from interface.menu import MenuPrincipal
+from agent_astar import AgenteAStar
 
 
 def main():
@@ -16,7 +17,6 @@ def main():
     menu = MenuPrincipal(LARGURA_TELA, ALTURA_TELA)
     dashboard = Dashboard()
 
-    # Inicia com um ambiente padrão apenas para existir na memória
     env = CampoBatalhaEnv(dificuldade="MEDIO")
 
     estado_atual = "ESTADO_MENU"
@@ -24,17 +24,21 @@ def main():
     status_jogo = "Correndo"
     acao_str = "Aguardando..."
 
-    fonte_tit_ag = pygame.font.SysFont("Segoe UI", 40, bold=True)
-    fonte_sub_ag = pygame.font.SysFont("Segoe UI", 20)
-    img_tit_ag = fonte_tit_ag.render("PAINEL DOS AGENTES IA (EM CONSTRUÇÃO)", True, (0, 180, 255))
-    img_sub_ag = fonte_sub_ag.render("Aqui visualizaremos o A*, Algoritmo Genético e Q-Learning.", True,
-                                     (170, 180, 190))
-    img_esc_ag = fonte_sub_ag.render("Pressione [ESC] para retornar ao Menu.", True, (240, 240, 245))
+    agente_selecionado = None
+
+    # Variáveis de Controle de Animação da IA
+    ia_em_execucao = False
+    rota_ia = []
+    indice_rota = 0
+    delay_passo_ia = 150
+    ultimo_tempo_mov = 0
 
     relogio = pygame.time.Clock()
 
     while True:
+        tempo_atual = pygame.time.get_ticks()
         eventos = pygame.event.get()
+
         for evento in eventos:
             if evento.type == pygame.QUIT:
                 pygame.quit()
@@ -48,10 +52,44 @@ def main():
             if novo_estado == "SAIR":
                 pygame.quit()
                 sys.exit()
-            elif novo_estado in ["SELECIONAR_DIF_MANUAL", "SELECIONAR_DIF_IA"]:
+            elif novo_estado == "SELECIONAR_DIF_MANUAL":
+                estado_atual = novo_estado
+            elif novo_estado == "ESTADO_SELECIONAR_AGENTE":
                 estado_atual = novo_estado
 
             menu.desenhar(tela)
+
+        # ==========================================
+        # 1.5. ESTADO: TELA DE SELEÇÃO DE AGENTE IA
+        # ==========================================
+        elif estado_atual == "ESTADO_SELECIONAR_AGENTE":
+            escolha_agente = menu.processar_eventos_agentes(eventos)
+
+            if escolha_agente == "VOLTAR":
+                estado_atual = "ESTADO_MENU"
+            elif escolha_agente == "ASTAR":
+                agente_selecionado = "A*"
+                estado_atual = "SELECIONAR_DIF_IA"
+            elif escolha_agente in ["GENETICO", "QLEARNING"]:
+                agente_selecionado = "Algoritmo Genético" if escolha_agente == "GENETICO" else "Q-Learning"
+                estado_atual = "ESTADO_EM_DESENVOLVIMENTO"  # <-- Roteamento de Bloqueio
+
+            menu.desenhar_agentes(tela)
+
+        # ==========================================
+        # 1.6. ESTADO: TELA "EM DESENVOLVIMENTO"
+        # ==========================================
+        elif estado_atual == "ESTADO_EM_DESENVOLVIMENTO":
+            escolha = menu.processar_eventos_wip(eventos)
+            if escolha == "VOLTAR":
+                estado_atual = "ESTADO_SELECIONAR_AGENTE"
+
+            # Permite voltar com ESC
+            for evento in eventos:
+                if evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:
+                    estado_atual = "ESTADO_SELECIONAR_AGENTE"
+
+            menu.desenhar_em_desenvolvimento(tela, agente_selecionado)
 
         # ==========================================
         # 2. ESTADO: TELA DE SELEÇÃO DE DIFICULDADE
@@ -60,16 +98,16 @@ def main():
             escolha = menu.processar_eventos_dificuldade(eventos)
 
             if escolha == "VOLTAR":
-                estado_atual = "ESTADO_MENU"
+                estado_atual = "ESTADO_MENU" if estado_atual == "SELECIONAR_DIF_MANUAL" else "ESTADO_SELECIONAR_AGENTE"
+
             elif escolha in ["FACIL", "MEDIO", "DIFICIL"]:
-                # É AQUI QUE A MÁGICA ACONTECE! Recriamos o mapa com a dificuldade escolhida.
                 env = CampoBatalhaEnv(dificuldade=escolha)
                 env.reset()
                 pontuacao = 0
                 status_jogo = "Correndo"
-                acao_str = "Nova Simulação"
+                acao_str = f"[{agente_selecionado}] Prontidão" if estado_atual == "SELECIONAR_DIF_IA" else "Nova Simulação"
+                ia_em_execucao = False
 
-                # Encaminha para o modo correto
                 if estado_atual == "SELECIONAR_DIF_MANUAL":
                     estado_atual = "ESTADO_JOGAR"
                 else:
@@ -87,48 +125,31 @@ def main():
 
             for evento in eventos:
                 if evento.type == pygame.KEYDOWN:
-
-                    # 1. ESC Volta ao Menu
                     if evento.key == pygame.K_ESCAPE:
                         estado_atual = "ESTADO_MENU"
-
-                    # 2. R Reinicia o mesmo nível
                     elif evento.key == pygame.K_r:
                         env.reset()
                         pontuacao = 0
                         status_jogo = "Correndo"
                         acao_str = "Nova Simulação"
-
-                    # --- NOVIDADE: N Avança para o próximo nível ---
                     elif evento.key == pygame.K_n and "VITÓRIA" in status_jogo:
                         if env.dificuldade == "FACIL":
                             env = CampoBatalhaEnv(dificuldade="MEDIO")
                         elif env.dificuldade == "MEDIO":
                             env = CampoBatalhaEnv(dificuldade="DIFICIL")
-
                         env.reset()
                         pontuacao = 0
                         status_jogo = "Correndo"
                         acao_str = "Avançou de Nível"
-
-                    # 3. Teclas de Movimento (Só operam se estiver vivo)
                     elif status_jogo == "Correndo":
                         if evento.key == pygame.K_UP:
-                            acao = 0
-                            acao_str = "Avançar"
-                            tomou_acao = True
+                            acao = 0; acao_str = "Avançar"; tomou_acao = True
                         elif evento.key == pygame.K_LEFT:
-                            acao = 1
-                            acao_str = "Esquerda"
-                            tomou_acao = True
+                            acao = 1; acao_str = "Esquerda"; tomou_acao = True
                         elif evento.key == pygame.K_RIGHT:
-                            acao = 2
-                            acao_str = "Direita"
-                            tomou_acao = True
+                            acao = 2; acao_str = "Direita"; tomou_acao = True
                         elif evento.key == pygame.K_DOWN:
-                            acao = 3
-                            acao_str = "Recuar"
-                            tomou_acao = True
+                            acao = 3; acao_str = "Recuar"; tomou_acao = True
 
             if tomou_acao and status_jogo == "Correndo":
                 _, recompensa, done, _ = env.step(acao)
@@ -137,26 +158,68 @@ def main():
                     status_jogo = "VITÓRIA!" if recompensa == 100 else "GAME OVER"
 
             tela.fill((0, 0, 0))
-            dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo)
+            dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo, modo="MANUAL")
 
         # ==========================================
-        # 4. ESTADO: TELA DOS AGENTES
+        # 4. ESTADO: TELA DOS AGENTES (IA)
         # ==========================================
         elif estado_atual == "ESTADO_AGENTES":
             for evento in eventos:
                 if evento.type == pygame.KEYDOWN:
+
                     if evento.key == pygame.K_ESCAPE:
                         estado_atual = "ESTADO_MENU"
+                        ia_em_execucao = False
+                    elif evento.key == pygame.K_r:
+                        env.reset()
+                        pontuacao = 0
+                        status_jogo = "Correndo"
+                        acao_str = f"[{agente_selecionado}] Prontidão"
+                        ia_em_execucao = False
+                    elif evento.key == pygame.K_n and "VITÓRIA" in status_jogo:
+                        if env.dificuldade == "FACIL":
+                            env = CampoBatalhaEnv(dificuldade="MEDIO")
+                        elif env.dificuldade == "MEDIO":
+                            env = CampoBatalhaEnv(dificuldade="DIFICIL")
+                        env.reset()
+                        pontuacao = 0
+                        status_jogo = "Correndo"
+                        acao_str = "Avançou de Nível"
+                        ia_em_execucao = False
 
-            tela.fill((15, 18, 25))
-            tela.blit(img_tit_ag, (LARGURA_TELA // 2 - img_tit_ag.get_width() // 2, ALTURA_TELA // 2 - 60))
-            tela.blit(img_sub_ag, (LARGURA_TELA // 2 - img_sub_ag.get_width() // 2, ALTURA_TELA // 2 + 10))
+                    elif evento.key == pygame.K_a and status_jogo == "Correndo" and not ia_em_execucao:
+                        agente = AgenteAStar(env)
+                        acao_str = "A* Calculando Rota..."
+                        dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo, modo="IA")
+                        pygame.display.flip()
 
-            # Mostra a dificuldade escolhida
-            img_dif = fonte_sub_ag.render(f"Dificuldade Selecionada: {env.dificuldade}", True, (255, 190, 50))
-            tela.blit(img_dif, (LARGURA_TELA // 2 - img_dif.get_width() // 2, ALTURA_TELA // 2 + 40))
+                        rota_ia = agente.planejar_rota()
+                        if rota_ia:
+                            ia_em_execucao = True
+                            indice_rota = 0
+                            ultimo_tempo_mov = tempo_atual
+                        else:
+                            acao_str = "A* Erro: Sem Saída!"
 
-            tela.blit(img_esc_ag, (LARGURA_TELA // 2 - img_esc_ag.get_width() // 2, ALTURA_TELA // 2 + 90))
+            if ia_em_execucao and status_jogo == "Correndo":
+                if tempo_atual - ultimo_tempo_mov > delay_passo_ia:
+                    if indice_rota < len(rota_ia):
+                        acao = rota_ia[indice_rota]
+                        mapa_acoes = {0: "Avançar", 1: "Esquerda", 2: "Direita", 3: "Recuar"}
+                        acao_str = f"A* -> {mapa_acoes[acao]}"
+
+                        _, recompensa, done, _ = env.step(acao)
+                        pontuacao += recompensa
+
+                        if done:
+                            status_jogo = "VITÓRIA!" if recompensa == 100 else "GAME OVER"
+                            ia_em_execucao = False
+
+                        indice_rota += 1
+                        ultimo_tempo_mov = tempo_atual
+
+            tela.fill((0, 0, 0))
+            dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo, modo="IA")
 
         pygame.display.flip()
         relogio.tick(30)

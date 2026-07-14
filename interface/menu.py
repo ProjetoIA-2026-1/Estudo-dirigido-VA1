@@ -10,8 +10,7 @@ class MenuPrincipal:
         self.BRANCO = (240, 240, 245)
         self.CINZA = (100, 110, 120)
         self.AZUL_DESTAQUE = (0, 180, 255)
-        self.VERDE_FACIL = (40, 180, 80)
-        self.VERMELHO_DIFICIL = (220, 50, 60)
+        self.OURO = (255, 190, 50)
 
         self.fonte_titulo = pygame.font.SysFont("Segoe UI", 48, bold=True)
         self.fonte_botoes = pygame.font.SysFont("Segoe UI", 24, bold=True)
@@ -28,6 +27,14 @@ class MenuPrincipal:
             "SAIR": pygame.Rect(centro_x, 480, largura_botao, altura_botao)
         }
 
+        # Botões de Seleção de Agente
+        self.botoes_agentes = {
+            "ASTAR": pygame.Rect(centro_x, 280, largura_botao, altura_botao),
+            "GENETICO": pygame.Rect(centro_x, 370, largura_botao, altura_botao),
+            "QLEARNING": pygame.Rect(centro_x, 460, largura_botao, altura_botao),
+            "VOLTAR": pygame.Rect(centro_x, 570, largura_botao, altura_botao)
+        }
+
         # Botões da Tela de Dificuldade
         self.botoes_dificuldade = {
             "FACIL": pygame.Rect(centro_x, 280, largura_botao, altura_botao),
@@ -35,6 +42,9 @@ class MenuPrincipal:
             "DIFICIL": pygame.Rect(centro_x, 460, largura_botao, altura_botao),
             "VOLTAR": pygame.Rect(centro_x, 570, largura_botao, altura_botao)
         }
+
+        # Botão único para a tela de "Em desenvolvimento"
+        self.botao_wip_voltar = pygame.Rect(centro_x, 500, largura_botao, altura_botao)
 
     # ==========================================
     # LÓGICA DO MENU PRINCIPAL
@@ -46,7 +56,7 @@ class MenuPrincipal:
                 if self.botoes_main["JOGAR_MANUAL"].collidepoint(pos_mouse):
                     return "SELECIONAR_DIF_MANUAL"
                 elif self.botoes_main["TREINAMENTO_IA"].collidepoint(pos_mouse):
-                    return "SELECIONAR_DIF_IA"
+                    return "ESTADO_SELECIONAR_AGENTE"
                 elif self.botoes_main["SAIR"].collidepoint(pos_mouse):
                     return "SAIR"
         return "ESTADO_MENU"
@@ -62,6 +72,70 @@ class MenuPrincipal:
         textos = ["Simulação Manual", "Painel de Agentes (IA)", "Sair"]
         chaves = ["JOGAR_MANUAL", "TREINAMENTO_IA", "SAIR"]
         self._desenhar_botoes(tela, self.botoes_main, chaves, textos)
+
+    # ==========================================
+    # LÓGICA DA TELA DE SELEÇÃO DE AGENTES
+    # ==========================================
+    def processar_eventos_agentes(self, eventos):
+        for evento in eventos:
+            if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
+                pos_mouse = pygame.mouse.get_pos()
+                if self.botoes_agentes["ASTAR"].collidepoint(pos_mouse):
+                    return "ASTAR"
+                elif self.botoes_agentes["GENETICO"].collidepoint(pos_mouse):
+                    return "GENETICO"
+                elif self.botoes_agentes["QLEARNING"].collidepoint(pos_mouse):
+                    return "QLEARNING"
+                elif self.botoes_agentes["VOLTAR"].collidepoint(pos_mouse):
+                    return "VOLTAR"
+        return "AGUARDANDO"
+
+    def desenhar_agentes(self, tela):
+        tela.fill(self.COR_FUNDO)
+
+        img_titulo = self.fonte_titulo.render("TREINAMENTO DE IA", True, self.BRANCO)
+        tela.blit(img_titulo, img_titulo.get_rect(center=(self.largura // 2, 120)))
+
+        img_sub = self.fonte_botoes.render("Selecione o Modelo de Inteligência Artificial", True, self.AZUL_DESTAQUE)
+        tela.blit(img_sub, img_sub.get_rect(center=(self.largura // 2, 170)))
+
+        textos = ["Agente A* (Busca)", "Algoritmo Genético", "Q-Learning (RL)", "<- Voltar ao Menu"]
+        chaves = ["ASTAR", "GENETICO", "QLEARNING", "VOLTAR"]
+        self._desenhar_botoes(tela, self.botoes_agentes, chaves, textos)
+
+    # ==========================================
+    # LÓGICA DA TELA DE "EM DESENVOLVIMENTO"
+    # ==========================================
+    def processar_eventos_wip(self, eventos):
+        for evento in eventos:
+            if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
+                if self.botao_wip_voltar.collidepoint(pygame.mouse.get_pos()):
+                    return "VOLTAR"
+        return "AGUARDANDO"
+
+    def desenhar_em_desenvolvimento(self, tela, nome_agente):
+        tela.fill(self.COR_FUNDO)
+
+        img_titulo = self.fonte_titulo.render("EM CONSTRUÇÃO", True, self.OURO)
+        tela.blit(img_titulo, img_titulo.get_rect(center=(self.largura // 2, 250)))
+
+        texto_info = f"A integração do modelo {nome_agente} será disponibilizada em breve."
+        img_sub = self.fonte_botoes.render(texto_info, True, self.CINZA)
+        tela.blit(img_sub, img_sub.get_rect(center=(self.largura // 2, 320)))
+
+        # Desenhar o botão voltar sozinho
+        pos_mouse = pygame.mouse.get_pos()
+        rect = self.botao_wip_voltar
+        if rect.collidepoint(pos_mouse):
+            pygame.draw.rect(tela, self.AZUL_DESTAQUE, rect, border_radius=8)
+            cor_texto = self.COR_FUNDO
+        else:
+            pygame.draw.rect(tela, (35, 42, 55), rect, border_radius=8)
+            pygame.draw.rect(tela, self.CINZA, rect, 2, border_radius=8)
+            cor_texto = self.BRANCO
+
+        texto_btn = self.fonte_botoes.render("<- Voltar", True, cor_texto)
+        tela.blit(texto_btn, texto_btn.get_rect(center=rect.center))
 
     # ==========================================
     # LÓGICA DA TELA DE DIFICULDADE
@@ -90,18 +164,16 @@ class MenuPrincipal:
         img_sub = self.fonte_botoes.render("Selecione o Nível de Dificuldade da Pista", True, self.AZUL_DESTAQUE)
         tela.blit(img_sub, img_sub.get_rect(center=(self.largura // 2, 170)))
 
-        # Dicas técnicas para o usuário
         dicas = [
-            "(FÁCIL) 60 Blocos",
-            "(MÉDIO) 80 Blocos",
-            "(DIFÍCIL) 100 Blocos"
+            "(FÁCIL) 60 Blocos | 2 Caminhos | Alta Sobrevivência",
+            "(MÉDIO) 80 Blocos | 2 Caminhos | Equilibrado",
+            "(DIFÍCIL) 100 Blocos | 1 Caminho | Funil de Minas"
         ]
-
         for i, dica in enumerate(dicas):
             img_dica = self.fonte_sub.render(dica, True, self.CINZA)
             tela.blit(img_dica, img_dica.get_rect(center=(self.largura // 2, 220 + (i * 25))))
 
-        textos = ["Modo Fácil", "Modo Médio", "Modo Difícil", "<- Voltar ao Menu"]
+        textos = ["Modo Fácil", "Modo Médio", "Modo Difícil", "<- Voltar"]
         chaves = ["FACIL", "MEDIO", "DIFICIL", "VOLTAR"]
         self._desenhar_botoes(tela, self.botoes_dificuldade, chaves, textos)
 

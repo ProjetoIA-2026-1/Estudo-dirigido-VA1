@@ -91,7 +91,6 @@ class Dashboard:
         py_agente = (env.comprimento - 1 - env.posicao_y) * self.LARGURA_CELULA - offset_y
         centro = (agente_px + self.LARGURA_CELULA // 2, py_agente + self.LARGURA_CELULA // 2)
 
-        # CORREÇÃO: Lendo a variável visual
         cor_agente = self.OURO_CHOCOLATE if env.bonus_visual else self.BRANCO
         pygame.draw.circle(tela, cor_agente, centro, self.LARGURA_CELULA // 2.5)
         pygame.draw.circle(tela, (20, 20, 20), centro, self.LARGURA_CELULA // 5)
@@ -106,7 +105,7 @@ class Dashboard:
         img_valor = self.fonte_grande.render(str(valor), True, cor_valor)
         tela.blit(img_valor, (x + 15, y + 45))
 
-    def _desenhar_painel(self, tela, env, pontuacao, acao_str, status):
+    def _desenhar_painel(self, tela, env, pontuacao, acao_str, status, modo):
         pygame.draw.rect(tela, self.COR_PAINEL, (self.LARGURA_JOGO, 0, self.LARGURA_PAINEL, self.ALTURA_TELA))
         pygame.draw.line(tela, self.COR_CARD, (self.LARGURA_JOGO, 0), (self.LARGURA_JOGO, self.ALTURA_TELA), 5)
 
@@ -122,7 +121,6 @@ class Dashboard:
             self.AZUL_OBJETIVO if "VITÓRIA" in status else self.VERMELHO_MINA)
         self._desenhar_card(tela, margem_x, 100, largura_total, 90, "STATUS DO AGENTE", status, cor_status)
 
-        # CORREÇÃO: Lê o limite real do mapa dinamicamente
         self._desenhar_card(tela, margem_x, 210, largura_metade, 90, "AVANÇO (EIXO Y)", f"{env.posicao_y} / {env.comprimento - 1}",
                             self.BRANCO)
         dist_tiros = env.posicao_y - env.linha_tiros_y
@@ -148,8 +146,13 @@ class Dashboard:
             img_texto = self.fonte_texto.render(texto, True, self.CINZA_TEXTO)
             tela.blit(img_texto, (margem_x + 15, y_ia + 55 + (i * 28)))
 
-        img_dica = self.fonte_texto.render(
-            "[Setas] Controle Manual    |    [R] Nova Simulação    |    [ESC] Voltar ao Menu", True, self.CINZA_TEXTO)
+        # Altera dinamicamente as dicas no rodapé com base no modo de jogo ativo
+        if modo == "MANUAL":
+            texto_rodape = "[Setas] Mover    |    [R] Reiniciar    |    [N] Avançar Nível    |    [ESC] Menu"
+        else:
+            texto_rodape = "[A] Iniciar A* |    [R] Reiniciar    |    [N] Avançar Nível    |    [ESC] Menu"
+
+        img_dica = self.fonte_texto.render(texto_rodape, True, self.CINZA_TEXTO)
         tela.blit(img_dica, (margem_x, self.ALTURA_TELA - 40))
 
     def _desenhar_overlay_fim_jogo(self, tela, status, env):
@@ -172,7 +175,7 @@ class Dashboard:
         rect_dica = img_dica.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 60))
         tela.blit(img_dica, rect_dica)
 
-        # --- NOVIDADE: Aviso de Próximo Nível (Tecla N) ---
+        # --- Aviso de Próximo Nível (Tecla N) ---
         if "VITÓRIA" in status and env.dificuldade in ["FACIL", "MEDIO"]:
             prox_nivel = "MÉDIO" if env.dificuldade == "FACIL" else "DIFÍCIL"
             img_next = self.fonte_texto.render(f"Pressione [ N ] para avançar ao nível {prox_nivel}", True,
@@ -180,14 +183,13 @@ class Dashboard:
             rect_next = img_next.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 90))
             tela.blit(img_next, rect_next)
 
-    def renderizar_frame(self, tela, env, pontuacao, acao_str, status):
+    def renderizar_frame(self, tela, env, pontuacao, acao_str, status, modo="MANUAL"):
         self.LARGURA_JOGO = env.largura * self.LARGURA_CELULA
         self.LARGURA_PAINEL = tela.get_width() - self.LARGURA_JOGO
 
         tempo = pygame.time.get_ticks()
         self._desenhar_jogo(tela, env, tempo)
-        self._desenhar_painel(tela, env, pontuacao, acao_str, status)
+        self._desenhar_painel(tela, env, pontuacao, acao_str, status, modo)
 
         if status != "Correndo":
-            # Passamos o 'env' agora para ele saber em qual dificuldade estamos
             self._desenhar_overlay_fim_jogo(tela, status, env)
