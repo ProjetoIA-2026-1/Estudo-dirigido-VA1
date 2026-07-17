@@ -5,6 +5,7 @@ from interface.dashboard import Dashboard
 from interface.menu import MenuPrincipal
 from agent_astar import AgenteAStar
 from agent_genetic import AlgoritmoGenetico
+from agent_qlearning import AgenteQLearning
 
 
 def main():
@@ -70,7 +71,7 @@ def main():
                 estado_atual = "SELECIONAR_DIF_IA"
             elif escolha_agente == "QLEARNING":
                 agente_selecionado = "Q-Learning"
-                estado_atual = "ESTADO_EM_DESENVOLVIMENTO"
+                estado_atual = "SELECIONAR_DIF_IA"
             menu.desenhar_agentes(tela)
 
         # ==========================================
@@ -106,6 +107,9 @@ def main():
                         ag_instancia = AlgoritmoGenetico(env)
                         ag_instancia.inicializar_populacao()
                         estado_atual = "ESTADO_TREINANDO_IA"
+                    elif agente_selecionado == "Q-Learning":
+                        ag_instancia = AgenteQLearning(env)
+                        estado_atual = "ESTADO_TREINANDO_QL"
                     else:
                         acao_str = f"[{agente_selecionado}] Prontidão"
                         estado_atual = "ESTADO_AGENTES"
@@ -129,6 +133,33 @@ def main():
                 if terminou or ag_instancia.geracao_atual > 800:
                     menu.preparar_galeria(ag_instancia.historico)
                     estado_atual = "ESTADO_GALERIA_AG"
+
+        # ==========================================
+        # 3. ESTADO: TREINAMENTO DO Q-LEARNING
+        # ==========================================
+        elif estado_atual == "ESTADO_TREINANDO_QL":
+            for evento in eventos:
+                if evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:
+                    estado_atual = "SELECIONAR_DIF_IA"
+
+            if estado_atual == "ESTADO_TREINANDO_QL":
+                dados_ep = None
+                for _ in range(40):
+                    if not ag_instancia.treinado:
+                        _, dados_ep = ag_instancia.treinar_um_episodio()
+                    else:
+                        break
+
+                menu.desenhar_treinamento_ql(tela, dados_ep, ag_instancia.episodios_totais)
+
+                if ag_instancia.treinado:
+                    env.reset()
+                    pontuacao = 0
+                    status_jogo = "Correndo"
+                    acao_str = "[Q-Learning] Prontidão para Execução!"
+                    ia_em_execucao = False
+                    rota_ia = []
+                    estado_atual = "ESTADO_AGENTES"
 
         # ==========================================
         # 4. ESTADO: GALERIA DE REPLAYS (JSON)
@@ -200,7 +231,7 @@ def main():
 
                     # ESC Inteligente
                     if evento.key == pygame.K_ESCAPE:
-                        if agente_selecionado == "A*":
+                        if agente_selecionado in ["A*", "Q-Learning"]:
                             estado_atual = "SELECIONAR_DIF_IA"
                         else:
                             estado_atual = "ESTADO_GALERIA_AG"  # Replay volta pra Galeria
@@ -223,20 +254,57 @@ def main():
                         ia_em_execucao = False;
                         rota_ia = []
 
-                    elif evento.key == pygame.K_a and status_jogo == "Correndo" and not ia_em_execucao:
-                        if agente_selecionado == "A*":
-                            agente = AgenteAStar(env)
-                            acao_str = "A* Calculando Rota..."
-                            # Mostramos "IA_ASTAR" no rodapé para exibir a opção [M]
-                            dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo, modo="IA_ASTAR")
-                            pygame.display.flip()
-                            rota_ia = agente.planejar_rota()
-                            if not rota_ia: acao_str = "A* Erro: Sem Saída!"
+                    elif evento.key == pygame.K_m and agente_selecionado == "Q-Learning":
+                        env = CampoBatalhaEnv(dificuldade=env.dificuldade)
+                        env.reset()
+                        ag_instancia = AgenteQLearning(env)
+                        pontuacao = 0;
+                        status_jogo = "Correndo";
+                        acao_str = "[Q-Learning] Retreinando em Novo Mapa..."
+                        ia_em_execucao = False;
+                        rota_ia = []
+                        estado_atual = "ESTADO_TREINANDO_QL"
 
-                        if rota_ia:
-                            ia_em_execucao = True
-                            indice_rota = 0
-                            ultimo_tempo_mov = tempo_atual
+                    elif evento.key == pygame.K_n and agente_selecionado == "Q-Learning":
+                        if env.dificuldade in ["FACIL", "MEDIO"]:
+                            nova_dif = "MEDIO" if env.dificuldade == "FACIL" else "DIFICIL"
+                            env = CampoBatalhaEnv(dificuldade=nova_dif)
+                            env.reset()
+                            ag_instancia = AgenteQLearning(env)
+                            pontuacao = 0;
+                            status_jogo = "Correndo";
+                            acao_str = f"[Q-Learning] Retreinando no Nível {nova_dif}..."
+                            ia_em_execucao = False;
+                            rota_ia = []
+                            estado_atual = "ESTADO_TREINANDO_QL"
+
+                    elif evento.key == pygame.K_a and not ia_em_execucao:
+                        if status_jogo != "Correndo" and agente_selecionado == "Q-Learning":
+                            env.reset()
+                            pontuacao = 0
+                            status_jogo = "Correndo"
+
+                        if status_jogo == "Correndo":
+                            if agente_selecionado == "A*":
+                                agente = AgenteAStar(env)
+                                acao_str = "A* Calculando Rota..."
+                                # Mostramos "IA_ASTAR" no rodapé para exibir a opção [M]
+                                dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo, modo="IA_ASTAR")
+                                pygame.display.flip()
+                                rota_ia = agente.planejar_rota()
+                                if not rota_ia: acao_str = "A* Erro: Sem Saída!"
+                            elif agente_selecionado == "Q-Learning":
+                                acao_str = "Q-Learning Planejando..."
+                                dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo, modo="IA_QLEARNING", ag_instancia=ag_instancia)
+                                pygame.display.flip()
+                                rota_ia = ag_instancia.planejar_rota()
+                                env.reset()
+                                if not rota_ia: acao_str = "Q-Learning: Rota não encontrada!"
+
+                            if rota_ia:
+                                ia_em_execucao = True
+                                indice_rota = 0
+                                ultimo_tempo_mov = tempo_atual
 
             if ia_em_execucao and status_jogo == "Correndo":
                 if tempo_atual - ultimo_tempo_mov > delay_passo_ia:
@@ -254,11 +322,13 @@ def main():
 
                         indice_rota += 1
                         ultimo_tempo_mov = tempo_atual
+                    else:
+                        ia_em_execucao = False
 
             tela.fill((0, 0, 0))
             # Ajusta o rodapé do Dashboard de forma contextual
-            modo_painel = "IA_ASTAR" if agente_selecionado == "A*" else "IA_REPLAY"
-            dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo, modo=modo_painel)
+            modo_painel = "IA_ASTAR" if agente_selecionado == "A*" else ("IA_QLEARNING" if agente_selecionado == "Q-Learning" else "IA_REPLAY")
+            dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo, modo=modo_painel, ag_instancia=ag_instancia)
 
         pygame.display.flip()
         relogio.tick(30)
