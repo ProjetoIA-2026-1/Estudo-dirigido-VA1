@@ -105,7 +105,7 @@ class Dashboard:
         img_valor = self.fonte_grande.render(str(valor), True, cor_valor)
         tela.blit(img_valor, (x + 15, y + 45))
 
-    def _desenhar_painel(self, tela, env, pontuacao, acao_str, status, modo):
+    def _desenhar_painel(self, tela, env, pontuacao, acao_str, status, modo, ag_instancia=None):
         pygame.draw.rect(tela, self.COR_PAINEL, (self.LARGURA_JOGO, 0, self.LARGURA_PAINEL, self.ALTURA_TELA))
         pygame.draw.line(tela, self.COR_CARD, (self.LARGURA_JOGO, 0), (self.LARGURA_JOGO, self.ALTURA_TELA), 5)
 
@@ -140,8 +140,16 @@ class Dashboard:
         img_ia_titulo = self.fonte_texto.render("PARÂMETROS DE APRENDIZADO DA IA", True, self.AZUL_OBJETIVO)
         tela.blit(img_ia_titulo, (margem_x + 15, y_ia + 15))
 
-        textos_ia = ["Geração Atual: ---", "Melhor Fitness Global: ---", "Taxa de Exploração (Epsilon): ---",
-                     "Penalidades Sofridas: ---"]
+        if modo == "IA_QLEARNING" and ag_instancia is not None:
+            textos_ia = [
+                f"Episódios Treinados: {ag_instancia.episodio_atual} / {ag_instancia.episodios_totais}",
+                f"Taxa Epsilon (Exploração): {ag_instancia.epsilon:.4f}",
+                f"Estados na Tabela Q: {len(ag_instancia.q_tabela)}",
+                f"Semente do Mapa: {env.seed_atual}"
+            ]
+        else:
+            textos_ia = ["Geração Atual: ---", "Melhor Fitness Global: ---", "Taxa de Exploração (Epsilon): ---",
+                         "Penalidades Sofridas: ---"]
         for i, texto in enumerate(textos_ia):
             img_texto = self.fonte_texto.render(texto, True, self.CINZA_TEXTO)
             tela.blit(img_texto, (margem_x + 15, y_ia + 55 + (i * 28)))
@@ -151,6 +159,11 @@ class Dashboard:
                 texto_rodape = "[Setas] Mover  |  [R] Reiniciar  |  [N] Avançar Nível  |  [ESC] Voltar"
             elif modo == "IA_ASTAR":
                 texto_rodape = "[A] Iniciar A* |  [R] Repetir Mapa  |  [M] Novo Mapa  |  [ESC] Voltar"
+            elif modo == "IA_QLEARNING":
+                if env.dificuldade in ["FACIL", "MEDIO"]:
+                    texto_rodape = "[A] Executar  |  [R] Repetir  |  [M] Novo Mapa  |  [N] Subir Nível  |  [ESC] Voltar"
+                else:
+                    texto_rodape = "[A] Executar  |  [R] Repetir  |  [M] Novo Mapa  |  [ESC] Voltar"
             elif modo == "IA_REPLAY":
                 texto_rodape = "[A] Iniciar Replay  |  [R] Repetir Replay  |  [ESC] Voltar"
             else:
@@ -159,7 +172,7 @@ class Dashboard:
             img_dica = self.fonte_texto.render(texto_rodape, True, self.CINZA_TEXTO)
             tela.blit(img_dica, (margem_x, self.ALTURA_TELA - 40))
 
-    def _desenhar_overlay_fim_jogo(self, tela, status, env):
+    def _desenhar_overlay_fim_jogo(self, tela, status, env, modo="MANUAL"):
         s_overlay = pygame.Surface((self.LARGURA_JOGO, self.ALTURA_TELA), pygame.SRCALPHA)
         s_overlay.fill((0, 0, 0, 180))
         tela.blit(s_overlay, (0, 0))
@@ -174,26 +187,40 @@ class Dashboard:
         pygame.draw.rect(tela, cor, rect.inflate(40, 40), 2, border_radius=10)
         tela.blit(img, rect)
 
-        # Aviso padrão (Tecla R)
-        img_dica = self.fonte_texto.render("Pressione [ R ] para jogar novamente", True, self.BRANCO)
-        rect_dica = img_dica.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 60))
-        tela.blit(img_dica, rect_dica)
+        if modo == "IA_QLEARNING":
+            img_dica1 = self.fonte_texto.render("[ R / A ] Executar Novamente   |   [ M ] Mudar Mapa (Retreinar)", True, self.BRANCO)
+            rect_dica1 = img_dica1.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 55))
+            tela.blit(img_dica1, rect_dica1)
 
-        # --- Aviso de Próximo Nível (Tecla N) ---
-        if "VITÓRIA" in status and env.dificuldade in ["FACIL", "MEDIO"]:
-            prox_nivel = "MÉDIO" if env.dificuldade == "FACIL" else "DIFÍCIL"
-            img_next = self.fonte_texto.render(f"Pressione [ N ] para avançar ao nível {prox_nivel}", True,
-                                               self.OURO_CHOCOLATE)
-            rect_next = img_next.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 90))
-            tela.blit(img_next, rect_next)
+            if env.dificuldade in ["FACIL", "MEDIO"]:
+                prox_nivel = "MÉDIO" if env.dificuldade == "FACIL" else "DIFÍCIL"
+                img_dica2 = self.fonte_texto.render(f"[ N ] Subir para Nível {prox_nivel}   |   [ ESC ] Sair", True, self.OURO_CHOCOLATE)
+            else:
+                img_dica2 = self.fonte_texto.render("[ ESC ] Sair para Menu de Dificuldade", True, self.OURO_CHOCOLATE)
 
-    def renderizar_frame(self, tela, env, pontuacao, acao_str, status, modo="MANUAL"):
+            rect_dica2 = img_dica2.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 85))
+            tela.blit(img_dica2, rect_dica2)
+        else:
+            # Aviso padrão (Tecla R)
+            img_dica = self.fonte_texto.render("Pressione [ R ] para jogar novamente", True, self.BRANCO)
+            rect_dica = img_dica.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 60))
+            tela.blit(img_dica, rect_dica)
+
+            # --- Aviso de Próximo Nível (Tecla N) ---
+            if "VITÓRIA" in status and env.dificuldade in ["FACIL", "MEDIO"]:
+                prox_nivel = "MÉDIO" if env.dificuldade == "FACIL" else "DIFÍCIL"
+                img_next = self.fonte_texto.render(f"Pressione [ N ] para avançar ao nível {prox_nivel}", True,
+                                                   self.OURO_CHOCOLATE)
+                rect_next = img_next.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 90))
+                tela.blit(img_next, rect_next)
+
+    def renderizar_frame(self, tela, env, pontuacao, acao_str, status, modo="MANUAL", ag_instancia=None):
         self.LARGURA_JOGO = env.largura * self.LARGURA_CELULA
         self.LARGURA_PAINEL = tela.get_width() - self.LARGURA_JOGO
 
         tempo = pygame.time.get_ticks()
         self._desenhar_jogo(tela, env, tempo)
-        self._desenhar_painel(tela, env, pontuacao, acao_str, status, modo)
+        self._desenhar_painel(tela, env, pontuacao, acao_str, status, modo, ag_instancia)
 
         if status != "Correndo":
-            self._desenhar_overlay_fim_jogo(tela, status, env)
+            self._desenhar_overlay_fim_jogo(tela, status, env, modo)

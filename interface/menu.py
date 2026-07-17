@@ -142,6 +142,36 @@ class MenuPrincipal:
             "Os cálculos pesados estão ocorrendo em background. Pressione [ESC] para abortar.", True, self.CINZA)
         tela.blit(img_aviso, img_aviso.get_rect(center=(self.largura // 2, 400)))
 
+    def desenhar_treinamento_ql(self, tela, dados_episodio, total_episodios):
+        tela.fill(self.COR_FUNDO)
+        img_titulo = self.fonte_titulo.render("Treinando Q-Learning no Mapa...", True, self.AZUL_DESTAQUE)
+        tela.blit(img_titulo, img_titulo.get_rect(center=(self.largura // 2, 230)))
+
+        if dados_episodio:
+            ep = dados_episodio.get('episodio', 0)
+            eps = dados_episodio.get('epsilon', 0.0)
+            max_y = dados_episodio.get('max_y_alcançado', 0)
+            pct = int((ep / max(1, total_episodios)) * 100)
+
+            texto = f"Episódio: {ep} / {total_episodios} ({pct}%) | Epsilon: {eps:.4f} | Máx Y: {max_y}"
+            img_sub = self.fonte_botoes.render(texto, True, self.BRANCO)
+            tela.blit(img_sub, img_sub.get_rect(center=(self.largura // 2, 310)))
+
+            # Barra de progresso visual moderna
+            largura_barra = 600
+            altura_barra = 20
+            x_barra = (self.largura - largura_barra) // 2
+            y_barra = 370
+            pygame.draw.rect(tela, (35, 42, 55), (x_barra, y_barra, largura_barra, altura_barra), border_radius=10)
+            largura_preenchida = int((pct / 100.0) * largura_barra)
+            if largura_preenchida > 0:
+                pygame.draw.rect(tela, self.AZUL_DESTAQUE, (x_barra, y_barra, min(largura_barra, largura_preenchida), altura_barra), border_radius=10)
+            pygame.draw.rect(tela, self.CINZA, (x_barra, y_barra, largura_barra, altura_barra), 2, border_radius=10)
+
+        img_aviso = self.fonte_sub.render(
+            "Treinamento tabular por Aprendizado por Reforço. Pressione [ESC] para abortar.", True, self.CINZA)
+        tela.blit(img_aviso, img_aviso.get_rect(center=(self.largura // 2, 440)))
+
     def preparar_galeria(self, historico):
         """Seleciona de forma inteligente 4 marcos históricos para exibir na Galeria."""
         self.botoes_galeria = []

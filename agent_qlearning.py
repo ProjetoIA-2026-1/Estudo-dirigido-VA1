@@ -3,10 +3,6 @@ import numpy as np
 
 
 class AgenteQLearning:
-    """
-    Agente inteligente baseado em Aprendizado por Reforço tabular (Q-Learning).
-    Especializado em aprender a rota e a política de sobrevivência para um único mapa/seed instanciado.
-    """
 
     def __init__(
         self,
@@ -21,7 +17,6 @@ class AgenteQLearning:
         self.env = env
 
         # Configurações de Hiperparâmetros padrão com base na dificuldade do ambiente
-        # Orçamento mais generoso de episódios para preenchimento profundo da Tabela Q
         config_defaults = {
             "FACIL":   {"alpha": 0.20, "gamma": 0.95, "decay": 0.992, "episodios": 600},
             "MEDIO":   {"alpha": 0.15, "gamma": 0.98, "decay": 0.996, "episodios": 1500},
@@ -41,8 +36,8 @@ class AgenteQLearning:
         self.epsilon_decay = epsilon_decay if epsilon_decay is not None else cfg["decay"]
         self.episodios_totais = episodios_totais if episodios_totais is not None else cfg["episodios"]
 
-        # Tabela Q: dicionário mapeando o estado `(x, y, dist_tiros_disc)` -> `[Q(0), Q(1), Q(2), Q(3)]`
-        # Ações permitidas no ambiente: 0=Avançar, 1=Esquerda, 2=Direita, 3=Recuar
+        # Tabela Q: mapeando o estado `(x, y, dist_tiros_disc)` -> `[Q(0), Q(1), Q(2), Q(3)]`
+        # Ações: 0=Avançar, 1=Esquerda, 2=Direita, 3=Recuar
         self.q_tabela = {}
 
         # Telemetria e histórico para análises e gráficos futuros
@@ -52,7 +47,7 @@ class AgenteQLearning:
 
     def _discretizar_distancia_tiros(self, dist):
         """
-        Discretiza a distância dos tiros que vêm por trás para simplificar o espaço de estados (Opção A).
+        Discretiza a distância dos tiros que vêm por trás.
         - 0: PERIGO EXTREMO (dist <= 1) -> tiros imediatamente atrás ou na mesma linha.
         - 1: ALERTA (2 <= dist <= 3) -> pouca margem para manobras laterais ou recuo.
         - 2: SEGURO (dist >= 4) -> margem folgada para exploração ou busca por chocolate.
@@ -66,7 +61,7 @@ class AgenteQLearning:
 
     def get_estado(self):
         """
-        Obtém a representação atual do estado (s) diretamente do ambiente:
+        Obtém a representação atual do estado diretamente do ambiente:
         s = (pos_x, pos_y, dist_tiros_discretizada)
         """
         x = self.env.posicao_x
@@ -88,7 +83,7 @@ class AgenteQLearning:
     def escolher_acao(self, estado, explorando=True):
         """
         Seleciona a ação usando política epsilon-greedy.
-        Quando `explorando=False`, retorna estritamente a melhor ação (explotação/greedy).
+        Quando `explorando=False`, retorna estritamente a melhor ação.
         """
         if explorando and random.random() < self.epsilon:
             return random.randint(0, 3)
@@ -97,13 +92,12 @@ class AgenteQLearning:
         max_q = max(q_valores)
 
         # Se houver empates entre as melhores ações, escolhe aleatoriamente entre as empatadas
-        # Isso garante exploração uniforme entre caminhos de mesmo valor no início do treino
         melhores_acoes = [i for i, q in enumerate(q_valores) if q == max_q]
         return random.choice(melhores_acoes)
 
     def _calcular_reward_shaping(self, acao, pos_y_anterior, pos_y_atual, recompensa_nativa, recorde_y):
         """
-        Aplica o Reward Shaping (reforço heurístico) inteligente para guiar o aprendizado em mapas complexos.
+        Aplica o Reward Shaping para guiar o aprendizado em mapas complexos.
         Mantém as recompensas/penalidades terminais intactas e lapida os passos intermediários.
         """
         # Se for recompensa terminal (Vitória ou Morte/Mina/Tiros) ou bônus de chocolate, mantém a nativa
@@ -127,7 +121,7 @@ class AgenteQLearning:
 
     def treinar_um_episodio(self):
         """
-        Executa um único episódio completo de treinamento (do reset até done ou limite de passos).
+        Executa um único episódio completo de treinamento.
         Útil para ser acionado sequencialmente no loop da interface gráfica ou em batch.
         """
         self.env.reset()
@@ -219,7 +213,7 @@ class AgenteQLearning:
 
     def obter_melhor_acao(self, estado=None):
         """
-        Retorna a melhor ação para o estado atual segundo a Tabela Q aprendida (sem exploração).
+        Retorna a melhor ação para o estado atual segundo a Tabela Q aprendida.
         Se `estado` não for passado, lê o estado diretamente do ambiente.
         """
         if estado is None:
@@ -228,9 +222,8 @@ class AgenteQLearning:
 
     def planejar_rota(self):
         """
-        Simula a execução determinística (greedy) do agente a partir do início do mapa para extrair
-        a rota de ações aprendida. Permite compatibilidade perfeita com a interface e com o main.py
-        (similar ao planejar_rota() do AgenteAStar).
+        Simula o greedy do agente a partir do início do mapa para extrair
+        a rota de ações aprendida. (similar ao planejar_rota() do Agente A*).
         """
         self.env.reset()
         caminho_acoes = []
