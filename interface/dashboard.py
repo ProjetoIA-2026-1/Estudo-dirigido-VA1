@@ -5,7 +5,6 @@ class Dashboard:
         # ---- CONFIGURAÇÕES VISUAIS ----
         self.LARGURA_CELULA = 35
         self.ALTURA_TELA = 720
-        # As larguras agora começam zeradas e serão calculadas dinamicamente
         self.LARGURA_JOGO = 0
         self.LARGURA_PAINEL = 0
 
@@ -140,6 +139,7 @@ class Dashboard:
         img_ia_titulo = self.fonte_texto.render("PARÂMETROS DE APRENDIZADO DA IA", True, self.AZUL_OBJETIVO)
         tela.blit(img_ia_titulo, (margem_x + 15, y_ia + 15))
 
+        # Condicionais de texto adaptadas para exibir Genético ou Q-Learning
         if modo == "IA_QLEARNING" and ag_instancia is not None:
             textos_ia = [
                 f"Episódios Treinados: {ag_instancia.episodio_atual} / {ag_instancia.episodios_totais}",
@@ -150,27 +150,30 @@ class Dashboard:
         else:
             textos_ia = ["Geração Atual: ---", "Melhor Fitness Global: ---", "Taxa de Exploração (Epsilon): ---",
                          "Penalidades Sofridas: ---"]
+
         for i, texto in enumerate(textos_ia):
             img_texto = self.fonte_texto.render(texto, True, self.CINZA_TEXTO)
             tela.blit(img_texto, (margem_x + 15, y_ia + 55 + (i * 28)))
 
-            # Altera dinamicamente as dicas no rodapé com base no modo exato de jogo ativo
-            if modo == "MANUAL":
-                texto_rodape = "[Setas] Mover  |  [R] Reiniciar  |  [N] Avançar Nível  |  [ESC] Voltar"
-            elif modo == "IA_ASTAR":
-                texto_rodape = "[A] Iniciar A* |  [R] Repetir Mapa  |  [M] Novo Mapa  |  [ESC] Voltar"
-            elif modo == "IA_QLEARNING":
-                if env.dificuldade in ["FACIL", "MEDIO"]:
-                    texto_rodape = "[A] Executar  |  [R] Repetir  |  [M] Novo Mapa  |  [N] Subir Nível  |  [ESC] Voltar"
-                else:
-                    texto_rodape = "[A] Executar  |  [R] Repetir  |  [M] Novo Mapa  |  [ESC] Voltar"
-            elif modo == "IA_REPLAY":
-                texto_rodape = "[A] Iniciar Replay  |  [R] Repetir Replay  |  [ESC] Voltar"
+        # Combinação de todos os atalhos de rodapé
+        if modo == "MANUAL":
+            texto_rodape = "[Setas] Mover  |  [R] Reiniciar  |  [N] Avançar Nível  |  [ESC] Voltar"
+        elif modo == "IA_ASTAR":
+            texto_rodape = "[A] Iniciar A* |  [R] Repetir Mapa  |  [M] Novo Mapa  |  [ESC] Voltar"
+        elif modo == "IA_GENETICO":
+            texto_rodape = "[T] Treinar (Zero) |  [C] Continuar (Transfer Learning) |  [ESC] Voltar"
+        elif modo == "IA_QLEARNING":
+            if env.dificuldade in ["FACIL", "MEDIO"]:
+                texto_rodape = "[A] Executar  |  [R] Repetir  |  [M] Novo Mapa  |  [N] Subir Nível  |  [ESC] Voltar"
             else:
-                texto_rodape = "[ESC] Voltar"
+                texto_rodape = "[A] Executar  |  [R] Repetir  |  [M] Novo Mapa  |  [ESC] Voltar"
+        elif modo == "IA_REPLAY":
+            texto_rodape = "[A] Iniciar Replay  |  [R] Repetir Replay  |  [ESC] Voltar"
+        else:
+            texto_rodape = "[ESC] Voltar"
 
-            img_dica = self.fonte_texto.render(texto_rodape, True, self.CINZA_TEXTO)
-            tela.blit(img_dica, (margem_x, self.ALTURA_TELA - 40))
+        img_dica = self.fonte_texto.render(texto_rodape, True, self.CINZA_TEXTO)
+        tela.blit(img_dica, (margem_x, self.ALTURA_TELA - 40))
 
     def _desenhar_overlay_fim_jogo(self, tela, status, env, modo="MANUAL"):
         s_overlay = pygame.Surface((self.LARGURA_JOGO, self.ALTURA_TELA), pygame.SRCALPHA)
@@ -187,6 +190,7 @@ class Dashboard:
         pygame.draw.rect(tela, cor, rect.inflate(40, 40), 2, border_radius=10)
         tela.blit(img, rect)
 
+        # Regras de visuais sobrepostas mantidas para o Q-Learning
         if modo == "IA_QLEARNING":
             img_dica1 = self.fonte_texto.render("[ R / A ] Executar Novamente   |   [ M ] Mudar Mapa (Retreinar)", True, self.BRANCO)
             rect_dica1 = img_dica1.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 55))
@@ -201,12 +205,10 @@ class Dashboard:
             rect_dica2 = img_dica2.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 85))
             tela.blit(img_dica2, rect_dica2)
         else:
-            # Aviso padrão (Tecla R)
             img_dica = self.fonte_texto.render("Pressione [ R ] para jogar novamente", True, self.BRANCO)
             rect_dica = img_dica.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 60))
             tela.blit(img_dica, rect_dica)
 
-            # --- Aviso de Próximo Nível (Tecla N) ---
             if "VITÓRIA" in status and env.dificuldade in ["FACIL", "MEDIO"]:
                 prox_nivel = "MÉDIO" if env.dificuldade == "FACIL" else "DIFÍCIL"
                 img_next = self.fonte_texto.render(f"Pressione [ N ] para avançar ao nível {prox_nivel}", True,

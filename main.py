@@ -31,6 +31,9 @@ def main():
     ag_instancia = None
     dados_geracao_ag = None
 
+    # --- Variável do alvo dinâmico de gerações (Genético) ---
+    geracao_alvo_ag = 800
+
     ia_em_execucao = False
     rota_ia = []
     indice_rota = 0
@@ -71,7 +74,7 @@ def main():
                 estado_atual = "SELECIONAR_DIF_IA"
             elif escolha_agente == "QLEARNING":
                 agente_selecionado = "Q-Learning"
-                estado_atual = "SELECIONAR_DIF_IA"
+                estado_atual = "SELECIONAR_DIF_IA" # Redireciona QL para seleção de dificuldade
             menu.desenhar_agentes(tela)
 
         # ==========================================
@@ -103,10 +106,10 @@ def main():
                     acao_str = "Nova Simulação"
                     estado_atual = "ESTADO_JOGAR"
                 else:
+                    # Define os comportamentos específicos para Genético e Q-Learning
                     if agente_selecionado == "Algoritmo Genético":
-                        ag_instancia = AlgoritmoGenetico(env)
-                        ag_instancia.inicializar_populacao()
-                        estado_atual = "ESTADO_TREINANDO_IA"
+                        acao_str = "[AG] Pressione T ou C"
+                        estado_atual = "ESTADO_AGENTES"
                     elif agente_selecionado == "Q-Learning":
                         ag_instancia = AgenteQLearning(env)
                         estado_atual = "ESTADO_TREINANDO_QL"
@@ -121,7 +124,6 @@ def main():
         # ==========================================
         elif estado_atual == "ESTADO_TREINANDO_IA":
             for evento in eventos:
-                # O ESC agora volta um passo para trás (escolher dificuldade)
                 if evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:
                     estado_atual = "SELECIONAR_DIF_IA"
 
@@ -129,13 +131,14 @@ def main():
                 terminou, dados_geracao_ag = ag_instancia.treinar_uma_geracao()
                 menu.desenhar_treinamento_ag(tela, dados_geracao_ag)
 
-                # Aumentamos o limite para 800 gerações!
-                if terminou or ag_instancia.geracao_atual > 800:
+                # Mantida a lógica dinâmica do Genético
+                if terminou or ag_instancia.geracao_atual > geracao_alvo_ag:
+                    ag_instancia.salvar_historico()
                     menu.preparar_galeria(ag_instancia.historico)
                     estado_atual = "ESTADO_GALERIA_AG"
 
         # ==========================================
-        # 3. ESTADO: TREINAMENTO DO Q-LEARNING
+        # 3.5. ESTADO: TREINAMENTO DO Q-LEARNING
         # ==========================================
         elif estado_atual == "ESTADO_TREINANDO_QL":
             for evento in eventos:
@@ -166,7 +169,6 @@ def main():
         # ==========================================
         elif estado_atual == "ESTADO_GALERIA_AG":
             escolha = menu.processar_eventos_galeria(eventos)
-            # Voltar daqui vai para a tela de dificuldade do Agente Genético
             if escolha == "VOLTAR":
                 estado_atual = "SELECIONAR_DIF_IA"
             elif isinstance(escolha, dict):
@@ -187,11 +189,10 @@ def main():
         # 5. ESTADO: SIMULAÇÃO MANUAL
         # ==========================================
         elif estado_atual == "ESTADO_JOGAR":
-            tomou_acao = False;
+            tomou_acao = False
             acao = -1
             for evento in eventos:
                 if evento.type == pygame.KEYDOWN:
-                    # ESC volta pra dificuldade
                     if evento.key == pygame.K_ESCAPE:
                         estado_atual = "SELECIONAR_DIF_MANUAL"
                     elif evento.key == pygame.K_r:
@@ -201,10 +202,7 @@ def main():
                             env = CampoBatalhaEnv(dificuldade="MEDIO")
                         elif env.dificuldade == "MEDIO":
                             env = CampoBatalhaEnv(dificuldade="DIFICIL")
-                        env.reset();
-                        pontuacao = 0;
-                        status_jogo = "Correndo";
-                        acao_str = "Avançou de Nível"
+                        env.reset(); pontuacao = 0; status_jogo = "Correndo"; acao_str = "Avançou de Nível"
                     elif status_jogo == "Correndo":
                         if evento.key == pygame.K_UP:
                             acao = 0; acao_str = "Avançar"; tomou_acao = True
@@ -229,39 +227,40 @@ def main():
             for evento in eventos:
                 if evento.type == pygame.KEYDOWN:
 
-                    # ESC Inteligente
                     if evento.key == pygame.K_ESCAPE:
                         if agente_selecionado in ["A*", "Q-Learning"]:
                             estado_atual = "SELECIONAR_DIF_IA"
+                        elif agente_selecionado == "Algoritmo Genético" and acao_str in ["[AG] Pressione T ou C", "Nenhum Checkpoint Encontrado!"]:
+                            estado_atual = "SELECIONAR_DIF_IA"
                         else:
-                            estado_atual = "ESTADO_GALERIA_AG"  # Replay volta pra Galeria
+                            estado_atual = "ESTADO_GALERIA_AG"
                         ia_em_execucao = False
 
                     elif evento.key == pygame.K_r:
-                        env.reset();
-                        pontuacao = 0;
-                        status_jogo = "Correndo";
-                        acao_str = f"[{agente_selecionado}] Prontidão";
+                        env.reset()
+                        pontuacao = 0
+                        status_jogo = "Correndo"
+                        if acao_str != "Pronto para Replay!":
+                            acao_str = f"[{agente_selecionado}] Prontidão"
                         ia_em_execucao = False
 
-                    # Tecla M: Novo mapa (Apenas para o A*)
                     elif evento.key == pygame.K_m and agente_selecionado == "A*":
                         env = CampoBatalhaEnv(dificuldade=env.dificuldade)
                         env.reset()
-                        pontuacao = 0;
-                        status_jogo = "Correndo";
+                        pontuacao = 0
+                        status_jogo = "Correndo"
                         acao_str = "Novo Mapa Gerado!"
-                        ia_em_execucao = False;
+                        ia_em_execucao = False
                         rota_ia = []
 
                     elif evento.key == pygame.K_m and agente_selecionado == "Q-Learning":
                         env = CampoBatalhaEnv(dificuldade=env.dificuldade)
                         env.reset()
                         ag_instancia = AgenteQLearning(env)
-                        pontuacao = 0;
-                        status_jogo = "Correndo";
+                        pontuacao = 0
+                        status_jogo = "Correndo"
                         acao_str = "[Q-Learning] Retreinando em Novo Mapa..."
-                        ia_em_execucao = False;
+                        ia_em_execucao = False
                         rota_ia = []
                         estado_atual = "ESTADO_TREINANDO_QL"
 
@@ -271,14 +270,32 @@ def main():
                             env = CampoBatalhaEnv(dificuldade=nova_dif)
                             env.reset()
                             ag_instancia = AgenteQLearning(env)
-                            pontuacao = 0;
-                            status_jogo = "Correndo";
+                            pontuacao = 0
+                            status_jogo = "Correndo"
                             acao_str = f"[Q-Learning] Retreinando no Nível {nova_dif}..."
-                            ia_em_execucao = False;
+                            ia_em_execucao = False
                             rota_ia = []
                             estado_atual = "ESTADO_TREINANDO_QL"
 
+                    elif evento.key == pygame.K_t and agente_selecionado == "Algoritmo Genético":
+                        ag_instancia = AlgoritmoGenetico(env)
+                        ag_instancia.inicializar_populacao()
+                        geracao_alvo_ag = 800
+                        estado_atual = "ESTADO_TREINANDO_IA"
+
+                    elif evento.key == pygame.K_c and agente_selecionado == "Algoritmo Genético":
+                        ag_instancia = AlgoritmoGenetico(env)
+                        if ag_instancia.carregar_checkpoint():
+                            env = CampoBatalhaEnv(dificuldade=ag_instancia.historico[-1]["dificuldade"], seed=ag_instancia.env.seed_atual)
+                            env.reset()
+                            ag_instancia.env = env
+                            geracao_alvo_ag = ag_instancia.geracao_atual + 800
+                            estado_atual = "ESTADO_TREINANDO_IA"
+                        else:
+                            acao_str = "Nenhum Checkpoint Encontrado!"
+
                     elif evento.key == pygame.K_a and not ia_em_execucao:
+                        # Reseta caso tenha finalizado um jogo de Q-Learning antes
                         if status_jogo != "Correndo" and agente_selecionado == "Q-Learning":
                             env.reset()
                             pontuacao = 0
@@ -288,11 +305,11 @@ def main():
                             if agente_selecionado == "A*":
                                 agente = AgenteAStar(env)
                                 acao_str = "A* Calculando Rota..."
-                                # Mostramos "IA_ASTAR" no rodapé para exibir a opção [M]
                                 dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo, modo="IA_ASTAR")
                                 pygame.display.flip()
                                 rota_ia = agente.planejar_rota()
                                 if not rota_ia: acao_str = "A* Erro: Sem Saída!"
+
                             elif agente_selecionado == "Q-Learning":
                                 acao_str = "Q-Learning Planejando..."
                                 dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo, modo="IA_QLEARNING", ag_instancia=ag_instancia)
@@ -323,11 +340,23 @@ def main():
                         indice_rota += 1
                         ultimo_tempo_mov = tempo_atual
                     else:
-                        ia_em_execucao = False
+                        ia_em_execucao = False # Correção de fim de rota
 
             tela.fill((0, 0, 0))
-            # Ajusta o rodapé do Dashboard de forma contextual
-            modo_painel = "IA_ASTAR" if agente_selecionado == "A*" else ("IA_QLEARNING" if agente_selecionado == "Q-Learning" else "IA_REPLAY")
+
+            # Definição abrangente para garantir o layout correto do Dashboard
+            if agente_selecionado == "A*":
+                modo_painel = "IA_ASTAR"
+            elif agente_selecionado == "Q-Learning":
+                modo_painel = "IA_QLEARNING"
+            elif agente_selecionado == "Algoritmo Genético":
+                if acao_str in ["[AG] Pressione T ou C", "Nenhum Checkpoint Encontrado!"]:
+                    modo_painel = "IA_GENETICO"
+                else:
+                    modo_painel = "IA_REPLAY"
+            else:
+                modo_painel = "IA_REPLAY"
+
             dashboard.renderizar_frame(tela, env, pontuacao, acao_str, status_jogo, modo=modo_painel, ag_instancia=ag_instancia)
 
         pygame.display.flip()
