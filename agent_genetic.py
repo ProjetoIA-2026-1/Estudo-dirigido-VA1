@@ -13,11 +13,12 @@ class Individuo:
 
 
 class AlgoritmoGenetico:
-    def __init__(self, env, tamanho_populacao=300):
+    # População otimizada para 200 (Evita gargalo de CPU no Python)
+    def __init__(self, env, tamanho_populacao=200):
         self.env_base = env
         self.tamanho_populacao = tamanho_populacao
 
-        self.num_inputs = 27
+        self.num_inputs = 26
         self.num_acoes = 4
         self.tamanho_cromossomo = self.num_inputs * self.num_acoes
 
@@ -26,10 +27,8 @@ class AlgoritmoGenetico:
         self.melhor_fitness_global = -999999
         self.geracoes_sem_melhora = 0
 
-        # --- A MEMÓRIA DO MELHOR CÉREBRO ---
         self.melhor_individuo_global = None
         self.geracao_melhor_global = 1
-
         self.num_lotes = 3
 
     def inicializar_populacao(self):
@@ -57,7 +56,6 @@ class AlgoritmoGenetico:
             return False
 
     def salvar_cerebro_campeao(self, individuo=None, geracao=None):
-        # Se não for passado um indivíduo, ele salva o campeão global da memória
         ind = individuo if individuo else self.melhor_individuo_global
         gen = geracao if geracao else self.geracao_melhor_global
 
@@ -77,7 +75,42 @@ class AlgoritmoGenetico:
         except Exception as e:
             pass
 
-    def _decidir_acao(self, pesos, visao_local, dist_fogo, env_ref):
+    def continuar_treinamento_do_cerebro(self):
+        pasta_atual = os.path.dirname(os.path.abspath(__file__))
+        caminho_arquivo = os.path.join(pasta_atual, "cerebro_campeao.json")
+
+        try:
+            if not os.path.exists(caminho_arquivo): return False
+            with open(caminho_arquivo, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+
+            dna_base = dados["cromossomo"]
+            if len(dna_base) != self.tamanho_cromossomo:
+                return False
+
+            self.populacao = []
+            campeao = Individuo(self.tamanho_cromossomo)
+            campeao.cromossomo = list(dna_base)
+            self.populacao.append(campeao)
+
+            while len(self.populacao) < self.tamanho_populacao:
+                clone = Individuo(self.tamanho_cromossomo)
+                clone.cromossomo = list(dna_base)
+                self._mutacao_pesos(clone, estagnado=True)
+                self.populacao.append(clone)
+
+            self.geracao_atual = dados.get("geracao_vencedora", 1) + 1
+            self.melhor_fitness_global = dados.get("fitness_medio", -999999)
+            self.geracoes_sem_melhora = 0
+
+            self.melhor_individuo_global = campeao
+            self.geracao_melhor_global = dados.get("geracao_vencedora", 1)
+
+            return True
+        except:
+            return False
+
+    def _decidir_acao(self, pesos, visao_local, env_ref, modo_treino=True):
         visao_flat = visao_local.flatten()
         visao_flat = np.delete(visao_flat, 12)
 
@@ -90,21 +123,19 @@ class AlgoritmoGenetico:
         visao_processada[visao_flat == 4] = 2.0
 
         dist_y = (env_ref.comprimento - 1 - env_ref.posicao_y) / float(env_ref.comprimento)
-        dist_fogo_norm = min(20.0, dist_fogo) / 20.0
         dist_x = (env_ref.objetivo_x - env_ref.posicao_x) / float(env_ref.largura)
 
-        inputs = np.concatenate([visao_processada, [dist_y, dist_fogo_norm, dist_x]])
+        inputs = np.concatenate([visao_processada, [dist_y, dist_x]])
         matriz_pesos = np.array(pesos).reshape(self.num_inputs, self.num_acoes)
         outputs = np.dot(inputs, matriz_pesos)
 
-        # 0: Avançar, 1: Esquerda, 2: Direita, 3: Recuar
-        if visao_local[1][2] in [env_ref.MINA, -1]: outputs[0] = -99999.0
-        if visao_local[2][1] in [env_ref.MINA, -1]: outputs[1] = -99999.0
-        if visao_local[2][3] in [env_ref.MINA, -1]: outputs[2] = -99999.0
-
-        fogo_no_recuo = env_ref.posicao_y - 1 - env_ref.linha_tiros_y
-        if visao_local[3][2] in [env_ref.MINA, -1] or fogo_no_recuo <= 0:
-            outputs[3] = -99999.0
+        # SELEÇÃO NATURAL: A máscara salva vidas só funciona na hora de você exibir para a banca (modo_treino=False).
+        # No treinamento, se a IA quiser pisar na mina, nós deixamos ela explodir para aprender a não fazer de novo!
+        if not modo_treino:
+            if visao_local[1][2] in [env_ref.MINA, -1]: outputs[0] = -99999.0
+            if visao_local[2][1] in [env_ref.MINA, -1]: outputs[1] = -99999.0
+            if visao_local[2][3] in [env_ref.MINA, -1]: outputs[2] = -99999.0
+            if visao_local[3][2] in [env_ref.MINA, -1]: outputs[3] = -99999.0
 
         return int(np.argmax(outputs))
 
@@ -118,43 +149,52 @@ class AlgoritmoGenetico:
             random.seed(semente)
             np.random.seed(semente)
 
-            visao_local, dist_fogo = env_teste.reset()
+            visao_local = env_teste.reset()
             pontuacao_total = 0
-            passos_dados = 0
 
+            menor_y_alcancado = env_teste.posicao_y
             visitados = set()
             visitados.add((env_teste.posicao_x, env_teste.posicao_y))
+
             penalidade_loop = 0
-            menor_y_alcancado = env_teste.posicao_y
+            passos_dados = 0
+            passos_sem_progresso = 0
 
-            limite_passos = env_teste.comprimento * 3
+            while True:
+                # O Treino passa True para o agente aprender sofrendo os perigos
+                acao = self._decidir_acao(cromossomo, visao_local, env_teste, modo_treino=True)
 
-            while passos_dados < limite_passos:
+                visao_local, recompensa, done, _ = env_teste.step(acao)
                 passos_dados += 1
-                acao = self._decidir_acao(cromossomo, visao_local, dist_fogo, env_teste)
-
-                estado_env, recompensa, done, _ = env_teste.step(acao)
-                visao_local, dist_fogo = estado_env
+                passos_sem_progresso += 1
 
                 x, y = env_teste.posicao_x, env_teste.posicao_y
-
-                if (x, y) in visitados:
-                    penalidade_loop += 5
+                if (x, y) in visitados: penalidade_loop += 8
                 visitados.add((x, y))
 
-                if y < menor_y_alcancado: menor_y_alcancado = y
+                if y < menor_y_alcancado:
+                    menor_y_alcancado = y
+                    passos_sem_progresso = 0  # Agente fez progresso real, reseta o timer!
 
                 pontuacao_total += recompensa
+
+                # EARLY STOPPING: Mata o processo prematuramente se a IA estiver andando em círculos.
+                # Salva um tempo computacional absurdo!
+                if passos_sem_progresso >= 35:
+                    done = True
+                    penalidade_loop += 100  # Punição severa por ser estagnado
+
                 if done:
                     if recompensa == 100: vitorias += 1
                     break
 
-            linhas_avancadas = (env_teste.comprimento - 1) - menor_y_alcancado
-            progresso_y = (linhas_avancadas ** 2.0) * 5
-            dist_x = abs(env_teste.objetivo_x - env_teste.posicao_x)
+            dist_manhattan = abs(env_teste.objetivo_x - env_teste.posicao_x) + abs(
+                (env_teste.comprimento - 1) - env_teste.posicao_y)
+            fit_mapa = (pontuacao_total * 2) - penalidade_loop - (dist_manhattan * 5)
 
-            fit_mapa = progresso_y + (pontuacao_total * 2) - penalidade_loop - (dist_x * 4)
-            if recompensa == 100: fit_mapa += 50000
+            if recompensa == 100:
+                bonus_velocidade = (env_teste.limite_passos - passos_dados) * 10
+                fit_mapa += 50000 + bonus_velocidade
 
             fitness_total += fit_mapa
 
@@ -205,7 +245,6 @@ class AlgoritmoGenetico:
                 self.melhor_fitness_global = melhor_fitness_geracao
                 self.geracao_melhor_global = self.geracao_atual
 
-                # Backup absoluto do melhor até agora
                 clone_campeao = Individuo(self.tamanho_cromossomo)
                 clone_campeao.cromossomo = list(melhor_individuo.cromossomo)
                 clone_campeao.fitness = melhor_individuo.fitness

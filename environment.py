@@ -22,9 +22,9 @@ class CampoBatalhaEnv:
         np.random.seed(self.seed_atual)
 
         self.configs = {
-            "FACIL": {"comprimento": 60, "mina": 0.04, "lama": 0.10, "choco": 0.02, "tiros_y": -3, "caminhos": 2},
-            "MEDIO": {"comprimento": 80, "mina": 0.06, "lama": 0.15, "choco": 0.03, "tiros_y": -6, "caminhos": 2},
-            "DIFICIL": {"comprimento": 100, "mina": 0.10, "lama": 0.23, "choco": 0.04, "tiros_y": -10, "caminhos": 2}
+            "FACIL": {"comprimento": 60, "mina": 0.04, "lama": 0.10, "choco": 0.02, "caminhos": 2},
+            "MEDIO": {"comprimento": 80, "mina": 0.06, "lama": 0.15, "choco": 0.03, "caminhos": 2},
+            "DIFICIL": {"comprimento": 100, "mina": 0.10, "lama": 0.23, "choco": 0.04, "caminhos": 2}
         }
 
         if self.dificuldade not in self.configs:
@@ -32,7 +32,6 @@ class CampoBatalhaEnv:
 
         self.cfg = self.configs[self.dificuldade]
         self.comprimento = self.cfg["comprimento"]
-
         self.objetivo_x = random.randint(2, self.largura - 3)
 
         self.mapa_original = self._orquestrar_geracao()
@@ -40,21 +39,28 @@ class CampoBatalhaEnv:
 
         self.posicao_x = None
         self.posicao_y = None
-        self.linha_tiros_y = None
+
+        self.linha_tiros_y = -9999
         self.bonus_visual = False
+
+        self.passos_dados = 0
+        self.limite_passos = (self.comprimento * self.largura) // 2
 
     def _orquestrar_geracao(self):
         from agent_astar import AgenteAStar
         agente_juiz = AgenteAStar(self)
-
         tentativas_maximas = 5
 
         for tentativa in range(tentativas_maximas):
             mapa_teste = self._gerar_aleatorio()
-            rota_primaria = agente_juiz.planejar_rota(mapa_customizado=mapa_teste)
+            # Validador garante que o labirinto tem saída usando linha reta e ignorando lama/chocolate
+            rota_primaria = agente_juiz.planejar_rota(mapa_customizado=mapa_teste, modo="VALIDADOR")
 
             if rota_primaria:
                 mapa_teste = self._alargar_rota(mapa_teste, rota_primaria)
+
+                # INJEÇÃO DAS MIGALHAS: Espalha chocolates na rota validada para guiar as IAs
+                mapa_teste = self._espalhar_migalhas(mapa_teste, rota_primaria)
 
                 if self.dificuldade == "DIFICIL" and self.cfg["caminhos"] > 1:
                     mapa_bloqueado = np.copy(mapa_teste)
@@ -73,13 +79,35 @@ class CampoBatalhaEnv:
                         if py != self.comprimento - 1 and py % 8 == 0:
                             mapa_bloqueado[py][px] = self.MINA
 
-                    rota_secundaria = agente_juiz.planejar_rota(mapa_customizado=mapa_bloqueado)
+                    rota_secundaria = agente_juiz.planejar_rota(mapa_customizado=mapa_bloqueado, modo="VALIDADOR")
                     if not rota_secundaria:
                         continue
-
                 return mapa_teste
-
         return self._gerar_golden_path()
+
+    def _espalhar_migalhas(self, mapa, rota):
+        """Transforma partes da rota correta em chocolate para guiar o agente."""
+        px, py = self.largura // 2, 0
+        coordenadas_rota = [(py, px)]
+
+        # Refaz os passos do A* Validador para saber exatamente por onde ele passou
+        for acao in rota:
+            if acao == 0:
+                py += 1
+            elif acao == 1:
+                px -= 1
+            elif acao == 2:
+                px += 1
+            elif acao == 3:
+                py -= 1
+            coordenadas_rota.append((py, px))
+
+        # 15% de chance de cada passo certo se transformar em um chocolate
+        for y, x in coordenadas_rota:
+            if mapa[y][x] == self.VAZIO and random.random() < 0.15:
+                mapa[y][x] = self.CHOCOLATE
+
+        return mapa
 
     def _alargar_rota(self, mapa, rota):
         px, py = self.largura // 2, 0
@@ -136,9 +164,8 @@ class CampoBatalhaEnv:
                         if 4 <= ny < self.comprimento - 4 and 0 <= nx < self.largura:
                             mapa[ny][nx] = tipo_cluster
 
-        # --- A NOVA ZONA DE RESGATE (3x2) ---
-        for dy in range(1, 3):  # Ocupa as duas últimas linhas
-            for dx in range(-1, 2):  # 3 blocos de largura
+        for dy in range(1, 3):
+            for dx in range(-1, 2):
                 nx = self.objetivo_x + dx
                 if 0 <= nx < self.largura:
                     mapa[self.comprimento - dy][nx] = self.OBJETIVO
@@ -148,23 +175,21 @@ class CampoBatalhaEnv:
     def _gerar_golden_path(self):
         mapa = np.zeros((self.comprimento, self.largura), dtype=int)
         x_atual = self.largura // 2
-
         caminho_seguro = set()
 
         for y in range(self.comprimento):
             caminho_seguro.add((y, x_atual))
-
             if x_atual < self.objetivo_x and random.random() > 0.4:
-                x_atual += 1
+                x_atual += 1;
                 caminho_seguro.add((y, x_atual))
             elif x_atual > self.objetivo_x and random.random() > 0.4:
-                x_atual -= 1
+                x_atual -= 1;
                 caminho_seguro.add((y, x_atual))
             elif random.random() < 0.2 and x_atual > 1:
-                x_atual -= 1
+                x_atual -= 1;
                 caminho_seguro.add((y, x_atual))
             elif random.random() > 0.8 and x_atual < self.largura - 2:
-                x_atual += 1
+                x_atual += 1;
                 caminho_seguro.add((y, x_atual))
 
         limite_mina = self.cfg["mina"]
@@ -174,8 +199,9 @@ class CampoBatalhaEnv:
         for y in range(4, self.comprimento - 4):
             for x in range(self.largura):
                 if (y, x) in caminho_seguro:
+                    # Aplica a migalha também caso caia no golden_path
+                    if random.random() < 0.15: mapa[y][x] = self.CHOCOLATE
                     continue
-
                 chance = random.random()
                 if chance < limite_mina:
                     mapa[y][x] = self.MINA
@@ -184,21 +210,19 @@ class CampoBatalhaEnv:
                 elif chance < limite_choco:
                     mapa[y][x] = self.CHOCOLATE
 
-        # --- A NOVA ZONA DE RESGATE (3x2) NO GOLDEN PATH ---
         for dy in range(1, 3):
             for dx in range(-1, 2):
                 nx = self.objetivo_x + dx
                 if 0 <= nx < self.largura:
                     mapa[self.comprimento - dy][nx] = self.OBJETIVO
-
         return mapa
 
     def reset(self):
         self.mapa = np.copy(self.mapa_original)
         self.posicao_x = self.largura // 2
         self.posicao_y = 0
-        self.linha_tiros_y = self.cfg["tiros_y"]
         self.bonus_visual = False
+        self.passos_dados = 0
         return self.get_visao_local()
 
     def get_visao_local(self, raio=2):
@@ -209,9 +233,10 @@ class CampoBatalhaEnv:
                 mapa_x = self.posicao_x + dx
                 if 0 <= mapa_y < self.comprimento and 0 <= mapa_x < self.largura:
                     visao[dy + raio][dx + raio] = self.mapa[mapa_y][mapa_x]
-        return visao, self.posicao_y - self.linha_tiros_y
+        return visao
 
     def step(self, acao):
+        self.passos_dados += 1
         novo_x = self.posicao_x
         novo_y = self.posicao_y
         self.bonus_visual = False
@@ -230,28 +255,25 @@ class CampoBatalhaEnv:
 
         terreno = self.mapa[self.posicao_y][self.posicao_x]
 
-        if terreno == self.LAMA:
-            self.linha_tiros_y += 2
-        elif terreno == self.CHOCOLATE:
-            self.linha_tiros_y -= 1
-        else:
-            self.linha_tiros_y += 1
-
         done = False
-        recompensa = -1
+        recompensa = -1  # Energia consumida para dar o passo
 
         if terreno == self.LAMA:
-            recompensa = -3
+            recompensa = -6
         elif terreno == self.CHOCOLATE:
-            recompensa = 5
+            recompensa = 14  # (+15 da recompensa, abate o custo do passo)
             self.bonus_visual = True
             self.mapa[self.posicao_y][self.posicao_x] = self.VAZIO
 
-        if terreno == self.MINA or self.posicao_y <= self.linha_tiros_y:
+        if terreno == self.MINA:
             recompensa = -100
             done = True
         elif terreno == self.OBJETIVO:
             recompensa = 100
+            done = True
+
+        if self.passos_dados >= self.limite_passos and not done:
+            recompensa = -50
             done = True
 
         return self.get_visao_local(), recompensa, done, {"pos_y": self.posicao_y, "pos_x": self.posicao_x}
