@@ -34,6 +34,7 @@ def main():
     ia_em_execucao = False
     rota_ia = []
     cerebro_carregado = None
+    visitados_ag = set() # Memória runtime do AG
 
     estado_ia = None
     indice_rota = 0
@@ -91,6 +92,7 @@ def main():
                 ia_em_execucao = False
                 rota_ia = []
                 cerebro_carregado = None
+                visitados_ag = set()
 
                 if estado_atual == "SELECIONAR_DIF_MANUAL":
                     acao_str = "Nova Simulação"
@@ -208,6 +210,7 @@ def main():
                         else:
                             acao_str = "Mapa Reiniciado. Pressione 'A' para o Rato correr."
                         ia_em_execucao = False
+                        visitados_ag = set()
 
                     elif evento.key == pygame.K_m and agente_selecionado in ["A*", "Algoritmo Genético"]:
                         env = CampoBatalhaEnv(dificuldade=env.dificuldade)
@@ -217,6 +220,7 @@ def main():
                         acao_str = "Labirinto Inédito Gerado! Pressione 'A' para testar."
                         ia_em_execucao = False
                         rota_ia = []
+                        visitados_ag = set()
 
                     elif evento.key == pygame.K_m and agente_selecionado == "Q-Learning":
                         env = CampoBatalhaEnv(dificuldade=env.dificuldade)
@@ -268,6 +272,7 @@ def main():
                             estado_ia = env.reset()
                             pontuacao = 0
                             status_jogo = "Correndo"
+                            visitados_ag = set()
                         else:
                             acao_str = "Erro: Cérebro não encontrado! Use 'T' para forjar um."
 
@@ -301,6 +306,7 @@ def main():
                                 if cerebro_carregado:
                                     ia_em_execucao = True
                                     acao_str = "Rato solto no labirinto!"
+                                    visitados_ag = set()
                                 else:
                                     acao_str = "Nenhum Cérebro na memória. Pressione 'C' primeiro."
 
@@ -311,8 +317,9 @@ def main():
                     if agente_selecionado == "Algoritmo Genético":
                         ag_dummy = AlgoritmoGenetico(env)
                         visao_local = estado_ia
-                        # AQUI: Na interface visual, o agente ganha a trava anti-suicídio (modo_treino=False)
-                        acao = ag_dummy._decidir_acao(cerebro_carregado, visao_local, env, modo_treino=False)
+                        # A Máscara de Memória age perfeitamente aqui!
+                        acao = ag_dummy._decidir_acao(cerebro_carregado, visao_local, env, modo_treino=False, visitados=visitados_ag)
+                        visitados_ag.add((env.posicao_x, env.posicao_y, acao))
                     else:
                         if indice_rota < len(rota_ia):
                             acao = rota_ia[indice_rota]

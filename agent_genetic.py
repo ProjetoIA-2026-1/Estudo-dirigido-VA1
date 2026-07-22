@@ -13,7 +13,6 @@ class Individuo:
 
 
 class AlgoritmoGenetico:
-    # População otimizada para 200 (Evita gargalo de CPU no Python)
     def __init__(self, env, tamanho_populacao=200):
         self.env_base = env
         self.tamanho_populacao = tamanho_populacao
@@ -110,7 +109,7 @@ class AlgoritmoGenetico:
         except:
             return False
 
-    def _decidir_acao(self, pesos, visao_local, env_ref, modo_treino=True):
+    def _decidir_acao(self, pesos, visao_local, env_ref, modo_treino=True, visitados=None):
         visao_flat = visao_local.flatten()
         visao_flat = np.delete(visao_flat, 12)
 
@@ -129,13 +128,25 @@ class AlgoritmoGenetico:
         matriz_pesos = np.array(pesos).reshape(self.num_inputs, self.num_acoes)
         outputs = np.dot(inputs, matriz_pesos)
 
-        # SELEÇÃO NATURAL: A máscara salva vidas só funciona na hora de você exibir para a banca (modo_treino=False).
-        # No treinamento, se a IA quiser pisar na mina, nós deixamos ela explodir para aprender a não fazer de novo!
+        # Na hora da exibição visual (modo_treino=False), aciona as travas
         if not modo_treino:
-            if visao_local[1][2] in [env_ref.MINA, -1]: outputs[0] = -99999.0
+            # Trava Anti-Suicídio
+            if visao_local[3][2] in [env_ref.MINA, -1]: outputs[0] = -99999.0
             if visao_local[2][1] in [env_ref.MINA, -1]: outputs[1] = -99999.0
             if visao_local[2][3] in [env_ref.MINA, -1]: outputs[2] = -99999.0
-            if visao_local[3][2] in [env_ref.MINA, -1]: outputs[3] = -99999.0
+            if visao_local[1][2] in [env_ref.MINA, -1]: outputs[3] = -99999.0
+
+            # Trava Anti-Looping (Memória Injetada)
+            if visitados is not None:
+                acoes_ordenadas = np.argsort(outputs)[::-1]
+                for acao_cand in acoes_ordenadas:
+                    if outputs[acao_cand] <= -90000: continue
+                    # Se não tentou essa ação neste bloco ainda, faça!
+                    if (env_ref.posicao_x, env_ref.posicao_y, acao_cand) not in visitados:
+                        return int(acao_cand)
+                # Se cercado, escolhe a melhor ação não-suicida
+                for acao_cand in acoes_ordenadas:
+                    if outputs[acao_cand] > -90000: return int(acao_cand)
 
         return int(np.argmax(outputs))
 
@@ -145,14 +156,12 @@ class AlgoritmoGenetico:
 
         for semente in sementes_lote:
             env_teste = self.env_base.__class__(dificuldade=self.env_base.dificuldade, seed=semente)
-
             random.seed(semente)
             np.random.seed(semente)
-
             visao_local = env_teste.reset()
-            pontuacao_total = 0
 
-            menor_y_alcancado = env_teste.posicao_y
+            pontuacao_total = 0
+            maior_y_alcancado = env_teste.posicao_y
             visitados = set()
             visitados.add((env_teste.posicao_x, env_teste.posicao_y))
 
@@ -161,39 +170,40 @@ class AlgoritmoGenetico:
             passos_sem_progresso = 0
 
             while True:
-                # O Treino passa True para o agente aprender sofrendo os perigos
                 acao = self._decidir_acao(cromossomo, visao_local, env_teste, modo_treino=True)
-
                 visao_local, recompensa, done, _ = env_teste.step(acao)
                 passos_dados += 1
                 passos_sem_progresso += 1
 
                 x, y = env_teste.posicao_x, env_teste.posicao_y
-                if (x, y) in visitados: penalidade_loop += 8
+                if (x, y) in visitados: penalidade_loop += 5
                 visitados.add((x, y))
 
-                if y < menor_y_alcancado:
-                    menor_y_alcancado = y
-                    passos_sem_progresso = 0  # Agente fez progresso real, reseta o timer!
+                if y > maior_y_alcancado:
+                    maior_y_alcancado = y
+                    passos_sem_progresso = 0
 
                 pontuacao_total += recompensa
 
-                # EARLY STOPPING: Mata o processo prematuramente se a IA estiver andando em círculos.
-                # Salva um tempo computacional absurdo!
+                # Guilhotina contra agentes que desistem e ficam andando em círculos
                 if passos_sem_progresso >= 35:
                     done = True
-                    penalidade_loop += 100  # Punição severa por ser estagnado
+                    penalidade_loop += 4000
 
                 if done:
                     if recompensa == 100: vitorias += 1
                     break
 
+            # NOVO FITNESS: Score exato baseado na Distância de Manhattan
             dist_manhattan = abs(env_teste.objetivo_x - env_teste.posicao_x) + abs(
                 (env_teste.comprimento - 1) - env_teste.posicao_y)
-            fit_mapa = (pontuacao_total * 2) - penalidade_loop - (dist_manhattan * 5)
+            dist_maxima = env_teste.largura + env_teste.comprimento
+            score_distancia = ((dist_maxima - dist_manhattan) / dist_maxima) * 10000
+
+            fit_mapa = score_distancia + (pontuacao_total * 2) - penalidade_loop
 
             if recompensa == 100:
-                bonus_velocidade = (env_teste.limite_passos - passos_dados) * 10
+                bonus_velocidade = (env_teste.limite_passos - passos_dados) * 5
                 fit_mapa += 50000 + bonus_velocidade
 
             fitness_total += fit_mapa
@@ -202,7 +212,7 @@ class AlgoritmoGenetico:
 
     def log_depuracao(self, geracao, fit, sucesso, estagnacao, acao="Treino"):
         caminho_log = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug_treino_ag.log")
-        log_str = f"Ger: {geracao:04d} | Modo: {self.env_base.dificuldade} | Fit Médio: {fit:7.1f} | Tx Vitória: {sucesso:5.1%} | Estagnação: {estagnacao:02d} | Status: {acao}\n"
+        log_str = f"Ger: {geracao:04d} | Modo: {self.env_base.dificuldade} | Fit Médio: {fit:7.1f} | Tx Vitória Campeão: {sucesso:5.1%} | Estagnação: {estagnacao:02d} | Status: {acao}\n"
         with open(caminho_log, "a", encoding="utf-8") as f:
             f.write(log_str)
 
@@ -211,21 +221,19 @@ class AlgoritmoGenetico:
 
         melhor_individuo = None
         melhor_fitness_geracao = -999999
-        vitorias_absolutas_geracao = 0
 
         for ind in self.populacao:
             fit_medio, vitorias = self.avaliar_em_lote(ind.cromossomo, sementes_lote)
             ind.fitness = fit_medio
             ind.taxa_vitoria = vitorias / self.num_lotes
 
-            if ind.taxa_vitoria == 1.0: vitorias_absolutas_geracao += 1
-
             if fit_medio > melhor_fitness_geracao:
                 melhor_fitness_geracao = fit_medio
                 melhor_individuo = ind
 
         terminou = False
-        taxa_sucesso_lote = vitorias_absolutas_geracao / self.tamanho_populacao
+        # O Log agora mostra a real eficiência do líder!
+        taxa_sucesso_campeao = melhor_individuo.taxa_vitoria
 
         if melhor_individuo.taxa_vitoria == 1.0:
             status_acao = "OBJETIVO DE GENERALIZAÇÃO ATINGIDO!"
@@ -238,8 +246,8 @@ class AlgoritmoGenetico:
             self.geracao_melhor_global = self.geracao_atual
 
             self.salvar_cerebro_campeao(melhor_individuo, self.geracao_atual)
-            self.log_depuracao(self.geracao_atual, melhor_fitness_geracao, taxa_sucesso_lote, self.geracoes_sem_melhora,
-                               status_acao)
+            self.log_depuracao(self.geracao_atual, melhor_fitness_geracao, taxa_sucesso_campeao,
+                               self.geracoes_sem_melhora, status_acao)
         else:
             if melhor_fitness_geracao > self.melhor_fitness_global:
                 self.melhor_fitness_global = melhor_fitness_geracao
@@ -255,19 +263,19 @@ class AlgoritmoGenetico:
             else:
                 self.geracoes_sem_melhora += 1
                 status_acao = "Estagnado"
-            self.log_depuracao(self.geracao_atual, melhor_fitness_geracao, taxa_sucesso_lote, self.geracoes_sem_melhora,
-                               status_acao)
+            self.log_depuracao(self.geracao_atual, melhor_fitness_geracao, taxa_sucesso_campeao,
+                               self.geracoes_sem_melhora, status_acao)
 
         dados_retorno = {
             "geracao": self.geracao_atual,
             "dificuldade": self.env_base.dificuldade,
             "fitness_campeao": melhor_fitness_geracao,
-            "taxa_sucesso": taxa_sucesso_lote
+            "taxa_sucesso": taxa_sucesso_campeao
         }
 
         if not terminou:
-            if self.geracoes_sem_melhora >= 50:
-                self.log_depuracao(self.geracao_atual, melhor_fitness_geracao, taxa_sucesso_lote,
+            if self.geracoes_sem_melhora >= 40:
+                self.log_depuracao(self.geracao_atual, melhor_fitness_geracao, taxa_sucesso_campeao,
                                    self.geracoes_sem_melhora, "CATACLISMO (Reboot Parcial)")
                 self.melhor_fitness_global = -999999
 
