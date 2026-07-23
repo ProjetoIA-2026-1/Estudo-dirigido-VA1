@@ -192,7 +192,7 @@ class Dashboard:
 
         # Regras de visuais sobrepostas mantidas para o Q-Learning
         if modo == "IA_QLEARNING":
-            img_dica1 = self.fonte_texto.render("[ R / A ] Executar Novamente   |   [ M ] Mudar Mapa (Retreinar)", True, self.BRANCO)
+            img_dica1 = self.fonte_texto.render("[ R / A ] Executar Novamente   |   [ M ] Mudar Mapa", True, self.BRANCO)
             rect_dica1 = img_dica1.get_rect(center=(self.LARGURA_JOGO // 2, (self.ALTURA_TELA // 2) + 55))
             tela.blit(img_dica1, rect_dica1)
 

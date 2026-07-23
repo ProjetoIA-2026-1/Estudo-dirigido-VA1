@@ -144,7 +144,7 @@ class MenuPrincipal:
 
     def desenhar_treinamento_ql(self, tela, dados_episodio, total_episodios):
         tela.fill(self.COR_FUNDO)
-        img_titulo = self.fonte_titulo.render("Treinando Q-Learning no Mapa...", True, self.AZUL_DESTAQUE)
+        img_titulo = self.fonte_titulo.render("Treinando Q-Learning...", True, self.AZUL_DESTAQUE)
         tela.blit(img_titulo, img_titulo.get_rect(center=(self.largura // 2, 230)))
 
         if dados_episodio:
