@@ -79,7 +79,7 @@ class AgenteQLearning:
             # Converte chaves tupla para string (JSON não aceita tuplas como chave)
             dados = {str(k): v for k, v in self.q_tabela.items()}
             with open(CAMINHO_QTABLE, 'w') as f:
-                json.dump(dados, f)
+                json.dump(dados, f, indent=2)
             print(f"[Q-Learning] Tabela Q salva: {len(self.q_tabela)} estados.")
         except Exception as e:
             print(f"[Q-Learning] Aviso: erro ao salvar tabela Q ({e}).")

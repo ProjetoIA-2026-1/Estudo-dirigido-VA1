@@ -44,7 +44,7 @@ class CampoBatalhaEnv:
         self.bonus_visual = False
 
         self.passos_dados = 0
-        self.limite_passos = (self.comprimento * self.largura) // 2
+        self.limite_passos = (self.comprimento * self.largura) // 4
 
     def _orquestrar_geracao(self):
         from agent_astar import AgenteAStar
